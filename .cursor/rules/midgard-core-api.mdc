@@ -120,4 +120,20 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 - Documentar API (ex.: Swagger); README com como rodar o projeto.
 
+---
+
+## 14. Swagger/OpenAPI – equalizar com as rotas
+
+**Qualquer alteração em rotas, controllers ou DTOs deve ser refletida na documentação Swagger.** Manter sempre a doc em sync com o comportamento real da API.
+
+- **Novo endpoint:** adicionar `@ApiOperation` (summary + description), `@ApiResponse` para sucesso (200/201) e para erros (400, 401, 404, 409, etc.) com o `type` correto (ex.: `ErrorResponseDto`). Rotas protegidas: `@ApiBearerAuth('Bearer')`.
+- **Alterar resposta de um endpoint:** atualizar o DTO de resposta usado em `@ApiResponse` e, se necessário, criar ou ajustar o schema (ex.: `AuthUserResponseDto`) com `@ApiProperty`.
+- **Alterar body/query de um endpoint:** atualizar o DTO de request com `@ApiProperty` (exemplos, descrição, required) para o schema aparecer no Scalar.
+- **Novo módulo/controller:** usar `@ApiTags('NomeDoRecurso')` no controller.
+- **Erros:** documentar os status que a rota pode retornar (validação 400, conflito 409, não autorizado 401, não encontrado 404) e usar um DTO de erro comum (ex.: `ErrorResponseDto`) para consistência.
+
+Referência: documentação interativa em `/docs` (Scalar); OpenAPI JSON em `/api-json`.
+
+---
+
 Referência completa: `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md`, `docs/SCHEMA-REVIEW.md`.
