@@ -42,7 +42,16 @@ export class RegisterUserUseCase {
       sub: user.id,
       email: user.email,
     });
-    const { password: _, ...userWithoutPassword } = user;
-    return { user: userWithoutPassword, token };
+    const authUser: AuthUser = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      coinsBalance: user.coinsBalance,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+    return { user: authUser, token };
   }
 }

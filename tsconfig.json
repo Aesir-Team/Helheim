@@ -18,13 +18,14 @@
     "skipLibCheck": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
-    "strictBindCallApply": false,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": false,
     "paths": {
       "@generated/prisma": [
         "generated/prisma"
       ]
-    }
+    },
+    "strict": true
   }
 }

@@ -22,7 +22,28 @@ export class UpdateProfileUseCase {
       throw new NotFoundError('Usuário não encontrado');
     }
     const user = await this.userRepo.updateProfile(userId, input);
-    const { password: _, ...profile } = user;
-    return profile;
+    return this.toAuthUser(user);
+  }
+
+  private toAuthUser(user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: AuthUser['role'];
+    coinsBalance: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }): AuthUser {
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      coinsBalance: user.coinsBalance,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 }

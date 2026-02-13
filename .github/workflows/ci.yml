@@ -1,4 +1,6 @@
-name: CI
+# CI: lint, test, build, e2e
+# CD: deploy no Dokploy só em push para main/master (após CI e E2E passarem)
+name: CI/CD
 
 on:
   push:

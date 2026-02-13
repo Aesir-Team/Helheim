@@ -16,7 +16,16 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 2. Arquitetura e estrutura de pastas
+## 2. Tipagem estrita – zero any
+
+- **Projeto 100% tipado:** não usar `any` em lugar nenhum (nem explícito nem implícito).
+- **ESLint:** `@typescript-eslint/no-explicit-any: error`; regras `no-unsafe-*` em error.
+- **tsconfig:** `noImplicitAny: true`, `strict: true`.
+- **Na prática:** todo parâmetro, retorno, variável e propriedade com tipo explícito ou inferível; em dúvida, tipar. Usar `unknown` em vez de `any` quando o tipo for realmente desconhecido; depois fazer type guard ou assertion segura.
+
+---
+
+## 3. Arquitetura e estrutura de pastas
 
 - **Clean Architecture:** Presentation → Application → Domain; Infrastructure implementa ports. Dependências só para dentro.
 - **Módulos em `src/modules/`:** `auth`, `catalog`, `access`, `lists`, `progress`, `coins`, `takedown` (e depois `payments`). Cada módulo tem:
@@ -28,7 +37,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 3. Ports e adapters
+## 4. Ports e adapters
 
 - **Port = interface** em `application/ports/`. Use cases dependem só de ports; nunca importar Prisma ou HTTP dentro de use case.
 - **Adapter** em `infrastructure/`: implementa a port (ex.: `PrismaMangaRepository` implementa `MangaRepositoryPort`).
@@ -37,7 +46,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 4. SOLID no código
+## 5. SOLID no código
 
 - **SRP:** Um use case por fluxo; um repositório por agregação; controller só chama use case e devolve response.
 - **OCP:** Novas políticas de acesso = novo use case ou nova implementação de interface (ex.: `ChapterAccessPolicy`); novo gateway = nova implementação de `ExternalMangaGatewayPort`.
@@ -47,7 +56,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 5. Catálogo: banco primeiro, scrape como fallback
+## 6. Catálogo: banco primeiro, scrape como fallback
 
 - **Sempre** buscar mangá/capítulo no **banco primeiro**. Fonte de verdade = nosso BD.
 - **GET /mangas/:slug:** `MangaRepositoryPort.findBySlug(slug)`. Se encontrou → retornar e, em background (1x/dia), se `lastSyncedAt` antigo e `syncStatus === 'idle'`, disparar `SyncMangaFromSourceUseCase`. Se não encontrou → chamar `SyncMangaFromSourceUseCase` (scrape, persistir), retornar mangá ou 404.
@@ -56,7 +65,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 6. Acesso (ler/baixar capítulo)
+## 7. Acesso (ler/baixar capítulo)
 
 - **CheckChapterAccess:** plano (limite semanal vs ilimitado), contagem de `UserChapterWeekAccess` na semana; se capítulo `accessLevel === coin`, verificar `UserChapterCoinUnlock` ou saldo (`User.coinsBalance` + `Chapter.coinCost`).
 - **Consume:** criar `UserChapterWeekAccess` (idempotente por userId+chapterId+weekStart) ou, se unlock por coins, debitar e criar `UserChapterCoinUnlock` + `CoinTransaction` (type `chapter_unlock`).
@@ -64,7 +73,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 7. Coins e anúncios
+## 8. Coins e anúncios
 
 - **1 anúncio = X coins** (configurável: `COINS_PER_AD` env ou `AppConfig`).
 - **Idempotência:** cliente envia `idempotencyKey` (um por exibição); tabela `AdRewardClaim(userId, idempotencyKey, coinsGranted)` com `UNIQUE(userId, idempotencyKey)`. Replay retorna 200 com mesmo resultado, sem creditar de novo.
@@ -74,7 +83,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 8. Schema Prisma
+## 9. Schema Prisma
 
 - Respeitar o schema em `prisma/schema.prisma`: User (coinsBalance), Manga (externalId, lastSyncedAt, syncStatus), Chapter (accessLevel, coinCost), Plan, Subscription (snapshot), Payment (idempotencyKey), UserChapterWeekAccess, UserChapterCoinUnlock, CoinTransaction, AdRewardClaim, UserMangaList, UserMangaListItem, ReadingProgress, TakedownRequest (notice & takedown).
 - Soft delete onde definido (deletedAt em User, Manga, Chapter).
@@ -83,7 +92,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 9. Consistência e segurança
+## 10. Consistência e segurança
 
 - **Transações:** operações que tocam mais de uma entidade (ex.: consumir acesso + criar WeekAccess + atualizar ReadingProgress) em transação Prisma.
 - **Idempotência:** ConsumeWeeklyChapterAccess, ad-reward e “registrar progresso” idempotentes (unique + upsert).
@@ -92,7 +101,7 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 10. Escopo MVP vs depois
+## 11. Escopo MVP vs depois
 
 - **MVP (P0/P1):** Auth (registro, login, perfil), Catalog (listar, detalhe mangá, detalhe capítulo, sync banco→fallback scrape), Access (limite semanal + bloqueio), Lists (CRUD listas, add/remove mangá), Progress (salvar, “continuar lendo”).
 - **Depois do MVP:** Coins (ad-reward, desbloqueio), Payments (Mercado Pago, webhooks), notificações, admin, busca avançada.
@@ -100,14 +109,14 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ---
 
-## 11. TDD e testes
+## 12. TDD e testes
 
 - **Sempre TDD:** escrever **testes primeiro**, depois o código. Nunca implementar a funcionalidade completa e só depois testar; red → green → refactor.
 - Ordem: definir o comportamento esperado (teste falha) → implementar o mínimo para passar → refatorar se necessário.
 - Use cases testados com ports mockados/fake; não depender de Prisma real nos unitários.
 - Controllers: só recebem request, chamam use case, devolvem response (testes cobrem o fluxo controller → use case com mocks).
 
-## 12. Documentação
+## 13. Documentação
 
 - Documentar API (ex.: Swagger); README com como rodar o projeto.
 
