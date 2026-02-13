@@ -1,0 +1,43 @@
+version: '3.8'
+
+# ================================================
+# DOCKER COMPOSE - DESENVOLVIMENTO
+# ================================================
+# Infraestrutura para desenvolvimento local
+# Backend roda no host com: npm run start:dev
+#
+# Para iniciar: ./docker/dev/up.sh
+# Para parar: ./docker/dev/down.sh
+# ================================================
+
+services:
+  # ================================
+  # PostgreSQL - Banco de Dados
+  # ================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: midgard-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-midgard}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-midgard123}
+      POSTGRES_DB: ${DB_NAME:-midgard_db}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - midgard-network-dev
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-midgard}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+    driver: local
+
+networks:
+  midgard-network-dev:
+    driver: bridge

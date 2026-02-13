@@ -1,0 +1,114 @@
+---
+description: Regras do projeto Midgard Core API (Clean Architecture, módulos, schema, fluxos)
+alwaysApply: true
+---
+
+# Midgard Core API – Regras do projeto
+
+Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `docs/SCHEMA-REVIEW.md`. Resumo obrigatório:
+
+---
+
+## 1. Produto e stack
+
+- **Produto:** app de mangás com catálogo; monetização por plano gratuito (limite semanal), assinatura (ilimitado) e coins (anúncios → desbloqueio de capítulos); listas customizadas; progresso e “continuar lendo”; sync com API de terceiros (banco primeiro, scrape como fallback).
+- **Stack:** NestJS (TypeScript), PostgreSQL, Prisma, JWT. Filas (Bull/Redis) opcional no MVP. Pagamentos: Mercado Pago (fase 2).
+
+---
+
+## 2. Arquitetura e estrutura de pastas
+
+- **Clean Architecture:** Presentation → Application → Domain; Infrastructure implementa ports. Dependências só para dentro.
+- **Módulos em `src/modules/`:** `auth`, `catalog`, `access`, `lists`, `progress`, `coins`, `takedown` (e depois `payments`). Cada módulo tem:
+  - `application/`: use cases + **ports** (interfaces em `ports/`); `*.module.ts` que registra use cases e tokens de port.
+  - `domain/`: entidades, value objects, erros de domínio (sem dependências externas).
+  - `infrastructure/`: adapters que implementam ports (Prisma, HTTP, JWT); outro `*.module.ts` que registra os adapters.
+  - `presentation/`: controllers, DTOs, guards.
+- **Shared:** `src/shared/domain/` (value-objects, errors) e `shared/infrastructure/` para código transversal.
+
+---
+
+## 3. Ports e adapters
+
+- **Port = interface** em `application/ports/`. Use cases dependem só de ports; nunca importar Prisma ou HTTP dentro de use case.
+- **Adapter** em `infrastructure/`: implementa a port (ex.: `PrismaMangaRepository` implementa `MangaRepositoryPort`).
+- Registrar no NestJS: `{ provide: MANGA_REPOSITORY, useClass: PrismaMangaRepository }`; no use case: `@Inject(MANGA_REPOSITORY) private readonly mangaRepo: MangaRepositoryPort`.
+- Ports focados: um port por agregação ou serviço externo; interfaces pequenas (Interface Segregation).
+
+---
+
+## 4. SOLID no código
+
+- **SRP:** Um use case por fluxo; um repositório por agregação; controller só chama use case e devolve response.
+- **OCP:** Novas políticas de acesso = novo use case ou nova implementação de interface (ex.: `ChapterAccessPolicy`); novo gateway = nova implementação de `ExternalMangaGatewayPort`.
+- **LSP:** Qualquer implementação de um port deve ser substituível (testes com fakes/mocks).
+- **ISP:** Ports pequenos; use case depende só do que usa.
+- **DIP:** Use cases recebem abstrações (ports), não implementações concretas.
+
+---
+
+## 5. Catálogo: banco primeiro, scrape como fallback
+
+- **Sempre** buscar mangá/capítulo no **banco primeiro**. Fonte de verdade = nosso BD.
+- **GET /mangas/:slug:** `MangaRepositoryPort.findBySlug(slug)`. Se encontrou → retornar e, em background (1x/dia), se `lastSyncedAt` antigo e `syncStatus === 'idle'`, disparar `SyncMangaFromSourceUseCase`. Se não encontrou → chamar `SyncMangaFromSourceUseCase` (scrape, persistir), retornar mangá ou 404.
+- **GET /chapters/:id:** Buscar capítulo + páginas; chamar `CheckChapterAccessUseCase`; se permitido, `ConsumeWeeklyChapterAccessUseCase` e retornar conteúdo; senão 403.
+- Sync **nunca** na thread da request; usar fila ou ao menos `setImmediate`/job em background.
+
+---
+
+## 6. Acesso (ler/baixar capítulo)
+
+- **CheckChapterAccess:** plano (limite semanal vs ilimitado), contagem de `UserChapterWeekAccess` na semana; se capítulo `accessLevel === coin`, verificar `UserChapterCoinUnlock` ou saldo (`User.coinsBalance` + `Chapter.coinCost`).
+- **Consume:** criar `UserChapterWeekAccess` (idempotente por userId+chapterId+weekStart) ou, se unlock por coins, debitar e criar `UserChapterCoinUnlock` + `CoinTransaction` (type `chapter_unlock`).
+- Bloquear leitura/download quando limite semanal atingido ou capítulo coin sem desbloqueio/saldo.
+
+---
+
+## 7. Coins e anúncios
+
+- **1 anúncio = X coins** (configurável: `COINS_PER_AD` env ou `AppConfig`).
+- **Idempotência:** cliente envia `idempotencyKey` (um por exibição); tabela `AdRewardClaim(userId, idempotencyKey, coinsGranted)` com `UNIQUE(userId, idempotencyKey)`. Replay retorna 200 com mesmo resultado, sem creditar de novo.
+- **CreditCoinsForAdUseCase:** em transação: verificar se já existe claim → senão, incrementar `User.coinsBalance`, criar `CoinTransaction` (type `ad_reward`), criar `AdRewardClaim`. Retornar `{ coinsGranted, newBalance }`.
+- Opcional: limite diário de recompensas (ex.: máx. 20/dia) via contagem de `AdRewardClaim` no dia.
+- Sempre que alterar saldo de coins: transação atômica + criar `CoinTransaction` (auditoria).
+
+---
+
+## 8. Schema Prisma
+
+- Respeitar o schema em `prisma/schema.prisma`: User (coinsBalance), Manga (externalId, lastSyncedAt, syncStatus), Chapter (accessLevel, coinCost), Plan, Subscription (snapshot), Payment (idempotencyKey), UserChapterWeekAccess, UserChapterCoinUnlock, CoinTransaction, AdRewardClaim, UserMangaList, UserMangaListItem, ReadingProgress, TakedownRequest (notice & takedown).
+- Soft delete onde definido (deletedAt em User, Manga, Chapter).
+- Índices e uniques já definidos no schema; evitar filtros em colunas não indexadas.
+- Novas entidades: manter enums para status, uniques onde fizer sentido, relações com onDelete explícito.
+
+---
+
+## 9. Consistência e segurança
+
+- **Transações:** operações que tocam mais de uma entidade (ex.: consumir acesso + criar WeekAccess + atualizar ReadingProgress) em transação Prisma.
+- **Idempotência:** ConsumeWeeklyChapterAccess, ad-reward e “registrar progresso” idempotentes (unique + upsert).
+- **Auth:** JWT em guard; em todo use case que recebe `userId`, validar que o recurso pertence ao usuário (listas, progresso, coins).
+- **Webhooks/pagamentos:** sempre usar `idempotencyKey` para evitar processar o mesmo evento duas vezes.
+
+---
+
+## 10. Escopo MVP vs depois
+
+- **MVP (P0/P1):** Auth (registro, login, perfil), Catalog (listar, detalhe mangá, detalhe capítulo, sync banco→fallback scrape), Access (limite semanal + bloqueio), Lists (CRUD listas, add/remove mangá), Progress (salvar, “continuar lendo”).
+- **Depois do MVP:** Coins (ad-reward, desbloqueio), Payments (Mercado Pago, webhooks), notificações, admin, busca avançada.
+- Ao implementar, seguir a ordem sugerida: estrutura → Auth → Catalog → Access → Coins → Lists → Progress → Polish.
+
+---
+
+## 11. TDD e testes
+
+- **Sempre TDD:** escrever **testes primeiro**, depois o código. Nunca implementar a funcionalidade completa e só depois testar; red → green → refactor.
+- Ordem: definir o comportamento esperado (teste falha) → implementar o mínimo para passar → refatorar se necessário.
+- Use cases testados com ports mockados/fake; não depender de Prisma real nos unitários.
+- Controllers: só recebem request, chamam use case, devolvem response (testes cobrem o fluxo controller → use case com mocks).
+
+## 12. Documentação
+
+- Documentar API (ex.: Swagger); README com como rodar o projeto.
+
+Referência completa: `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md`, `docs/SCHEMA-REVIEW.md`.

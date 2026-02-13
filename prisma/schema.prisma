@@ -1,0 +1,476 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============== Auth / Users ==============
+
+enum Role {
+  ADMIN
+  MODERATOR
+  VIP
+  // do vip pra cima todos tem acesso liberado aos manhuas
+  USER
+}
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  password   String
+  firstName  String
+  lastName   String
+  role       Role     @default(USER)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  /// Saldo de coins (ganhas ao assistir anúncios). Gastas para desbloquear capítulos fora do plano.
+  coinsBalance       Int       @default(0)
+  subscriptions      Subscription[]
+  payments           Payment[]
+  coinTransactions   CoinTransaction[]
+  chapterWeekAccess  UserChapterWeekAccess[]
+  chapterCoinUnlocks UserChapterCoinUnlock[]
+  adRewardClaims     AdRewardClaim[]
+  mangaLists         UserMangaList[]
+  readingProgress    ReadingProgress[]
+  processedTakedownRequests TakedownRequest[] @relation("TakedownProcessedBy")
+  takedownRequestsSubmitted TakedownRequest[]  @relation("TakedownRequester")
+
+  @@index([email])
+  @@index([id])
+  @@map("users")
+}
+
+enum MangaStatus {
+  ongoing
+  completed
+  cancelled
+}
+
+enum MangaType {
+  manga
+  manhwa
+  manhua
+}
+
+/// Estado da sincronização com a API de terceiros (scrape). "idle" = ninguém sincronizando; "syncing" = primeiro que abriu está atualizando.
+enum MangaSyncStatus {
+  idle
+  syncing
+  error
+}
+
+enum CategoryType {
+  genre
+  theme
+}
+
+model Category {
+  id     String       @id @default(uuid())
+  name   String
+  slug   String       @unique
+  type   CategoryType
+  isNsfw Boolean      @default(false)
+  mangas MangaCategory[]
+
+  @@index([slug])
+  @@index([type])
+  @@map("categories")
+}
+
+model Manga {
+  id              String    @id @default(uuid())
+  title           String
+  slug            String    @unique
+  alternativeTitles String?
+  description     String?   @db.Text
+  coverImage      String
+  bannerImage     String?
+  status          MangaStatus @default(ongoing)
+  type            MangaType
+  rating          Float     @default(0)
+  views           Int       @default(0)
+  releaseYear     Int?
+  isNsfw          Boolean   @default(false)
+  author          String?
+  artist          String?
+  officialLink    String?
+  lastChapterAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  /// Scrape/sync com API de terceiros: 1x por dia o primeiro que abrir este mangá dispara a atualização.
+  externalId       String?   /// ID ou slug na API de origem (ex.: Nexustoons).
+  lastSyncedAt     DateTime? /// Última vez que buscamos dados/capítulos da fonte.
+  syncStatus       MangaSyncStatus @default(idle) /// Evita dois usuários dispararem sync ao mesmo tempo.
+  lastSyncError    String?   @db.Text /// Mensagem do último erro (se syncStatus == error).
+
+  categories      MangaCategory[]
+  chapters        Chapter[]
+  listItems       UserMangaListItem[]
+  readingProgress ReadingProgress[]
+  takedownRequests TakedownRequest[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([type])
+  @@index([lastChapterAt])
+  @@index([isNsfw])
+  @@index([lastSyncedAt])
+  @@index([syncStatus])
+  @@index([externalId])
+  @@map("mangas")
+}
+
+model MangaCategory {
+  mangaId    String
+  categoryId String
+  manga      Manga    @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([mangaId, categoryId])
+  @@index([categoryId])
+  @@map("manga_categories")
+}
+
+// ============== Capítulos ==============
+
+enum ReleaseStatus {
+  draft
+  published
+}
+
+/// Nível de acesso do capítulo: public = grátis; coin = desbloqueia com coins (ganhas por anúncio).
+enum AccessLevel {
+  public
+  coin
+}
+
+model Chapter {
+  id                String        @id @default(uuid())
+  mangaId           String
+  number            String
+  title             String?
+  views             Int           @default(0)
+  releaseStatus     ReleaseStatus @default(published)
+  accessLevel       AccessLevel   @default(public)
+  coinCost          Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  // Navegação anterior/próximo (ordenação por manga + number)
+  previousChapterId String?  @unique
+  nextChapterId     String?  @unique
+
+  manga                    Manga         @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+  previousChapter          Chapter?      @relation("PrevChapter", fields: [previousChapterId], references: [id], onDelete: SetNull)
+  nextChapter              Chapter?      @relation("NextChapter", fields: [nextChapterId], references: [id], onDelete: SetNull)
+  chapterWithThisAsPrev    Chapter?      @relation("PrevChapter")
+  chapterWithThisAsNext    Chapter?      @relation("NextChapter")
+  pages           ChapterPage[]
+  weekAccesses    UserChapterWeekAccess[]
+  coinUnlocks     UserChapterCoinUnlock[]
+  readingProgress ReadingProgress[]
+
+  @@unique([mangaId, number])
+  @@index([mangaId])
+  @@index([previousChapterId])
+  @@index([nextChapterId])
+  @@index([createdAt])
+  @@map("chapters")
+}
+
+model ChapterPage {
+  id         String  @id @default(uuid())
+  chapterId  String
+  pageNumber Int
+  imageUrl   String
+  chapter    Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, pageNumber])
+  @@index([chapterId])
+  @@map("chapter_pages")
+}
+
+// ============== Assinaturas e pagamentos ==============
+
+enum BillingInterval {
+  monthly
+  yearly
+}
+
+/// Planos de assinatura (ex.: gratuito, premium).
+/// freeChaptersPerWeek: null = ilimitado (assinante); número = limite semanal no plano gratuito.
+model Plan {
+  id                  String          @id @default(uuid())
+  name                String
+  slug                String          @unique
+  description         String?         @db.Text
+  /// Limite de capítulos que podem ser lidos/baixados por semana. null = sem limite (plano pago).
+  freeChaptersPerWeek Int?
+  /// Preço em centavos (ex.: 1990 = R$ 19,90). null para plano gratuito.
+  priceInCents       Int?
+  billingInterval    BillingInterval?
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  active
+  cancelled
+  expired
+}
+
+/// Assinatura do usuário a um plano (histórico: uma por período ativo).
+model Subscription {
+  id         String             @id @default(uuid())
+  userId     String
+  planId     String
+  status     SubscriptionStatus @default(active)
+  startedAt  DateTime          @default(now())
+  expiresAt  DateTime?
+  cancelledAt DateTime?
+  /// Snapshot do plano no momento da assinatura (para histórico se o plano mudar).
+  planNameAtSubscription   String?
+  priceInCentsAtSubscription Int?
+
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan    Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments Payment[]
+
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("subscriptions")
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+/// Registro de pagamento (Mercado Pago, Stripe, etc.).
+model Payment {
+  id                  String        @id @default(uuid())
+  userId              String
+  subscriptionId      String?
+  amountInCents       Int
+  currency            String        @default("BRL")
+  status              PaymentStatus @default(pending)
+  /// ID do pagamento no gateway (ex.: Mercado Pago payment_id).
+  externalPaymentId   String?
+  externalPayerId     String?
+  /// Chave de idempotência (ex.: webhook event_id) para evitar processar o mesmo pagamento duas vezes.
+  idempotencyKey      String?       @unique
+  paidAt              DateTime?
+  metadata            Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([externalPaymentId])
+  @@map("payments")
+}
+
+/// Controle de uso: capítulos acessados (lidos/baixados) por usuário por semana.
+/// Semana = weekStart (segunda 00:00 UTC). Usado para aplicar limite do plano gratuito.
+model UserChapterWeekAccess {
+  id        String   @id @default(uuid())
+  userId    String
+  chapterId String
+  /// Início da semana (segunda-feira 00:00:00 UTC).
+  weekStart DateTime
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chapterId, weekStart])
+  @@index([userId])
+  @@index([userId, weekStart])
+  @@map("user_chapter_week_access")
+}
+
+/// Capítulos desbloqueados com coins (uma vez pago, não cobra de novo).
+/// Coins são ganhas ao assistir anúncios; Chapter.coinCost define o preço por capítulo.
+model UserChapterCoinUnlock {
+  id         String   @id @default(uuid())
+  userId     String
+  chapterId  String
+  coinsSpent Int
+  createdAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chapterId])
+  @@index([userId])
+  @@index([chapterId])
+  @@map("user_chapter_coin_unlocks")
+}
+
+// ============== Recompensa por anúncio (idempotência) ==============
+
+/// Uma recompensa creditada por "assistir 1 anúncio". idempotencyKey = token do cliente (evita replay).
+model AdRewardClaim {
+  id             String   @id @default(uuid())
+  userId         String
+  idempotencyKey String
+  coinsGranted   Int
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@map("ad_reward_claims")
+}
+
+// ============== Auditoria coins, biblioteca e progresso ==============
+
+enum CoinTransactionType {
+  ad_reward
+  chapter_unlock
+  bonus
+  refund
+  admin_adjustment
+}
+
+/// Histórico de movimentação de coins (auditoria e extrato para o usuário).
+model CoinTransaction {
+  id          String              @id @default(uuid())
+  userId      String
+  amount      Int
+  type        CoinTransactionType
+  balanceAfter Int?
+  /// Referência: chapterId (unlock), paymentId (refund), etc.
+  referenceId String?
+  referenceType String?
+  metadata    Json?
+  createdAt   DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([type])
+  @@map("coin_transactions")
+}
+
+/// Lista criada pelo usuário (nome livre: "Favoritos", "Para ler", "Lendo", etc.).
+model UserMangaList {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  sortOrder Int      @default(0)
+  /// Quantos mangás da lista o usuário já leu (tem progresso). Atualizar quando o progresso mudar.
+  mangasReadCount Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items  UserMangaListItem[]
+
+  @@index([userId])
+  @@map("user_manga_lists")
+}
+
+/// Mangá dentro de uma lista do usuário (um mangá pode estar em várias listas do mesmo usuário).
+model UserMangaListItem {
+  id        String   @id @default(uuid())
+  listId    String
+  mangaId   String
+  sortOrder Int      @default(0)
+  addedAt   DateTime @default(now())
+
+  list  UserMangaList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  manga Manga         @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, mangaId])
+  @@index([listId])
+  @@index([mangaId])
+  @@map("user_manga_list_items")
+}
+
+/// Progresso de leitura por mangá: último capítulo e página para "continuar lendo".
+/// Um registro por (usuário, mangá); ao avançar no mesmo mangá, atualiza este registro.
+model ReadingProgress {
+  id               String   @id @default(uuid())
+  userId           String
+  mangaId          String
+  chapterId        String
+  pageNumber       Int      @default(1)
+  /// Quantos capítulos o usuário já leu neste mangá (incrementar ao abrir/concluir capítulo).
+  chaptersReadCount Int     @default(0)
+  lastReadAt       DateTime @default(now())
+
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manga   Manga  @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mangaId])
+  @@index([userId])
+  @@index([userId, lastReadAt])
+  @@map("reading_progress")
+}
+
+// ============== Notice & Takedown (pedidos de retirada de conteúdo) ==============
+
+enum TakedownRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+/// Pedido de retirada de mangá/manhua do catálogo (notice & takedown; requer usuário logado).
+model TakedownRequest {
+  id                 String                @id @default(uuid())
+  requesterId        String                /// Usuário logado que enviou o pedido
+  mangaId            String
+  reason             String                @db.Text
+  requesterName      String                /// Pode vir do perfil ou do form (ex.: "em nome de X")
+  requesterEmail     String
+  requesterDocument  String?
+  declarationAccepted Boolean
+  status             TakedownRequestStatus  @default(pending)
+  responseNote       String?               @db.Text
+  processedAt        DateTime?
+  processedById      String?
+
+  requester   User   @relation("TakedownRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  manga       Manga  @relation(fields: [mangaId], references: [id], onDelete: Restrict)
+  processedBy User?  @relation("TakedownProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+
+  @@index([requesterId])
+  @@index([mangaId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("takedown_requests")
+}
