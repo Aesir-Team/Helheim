@@ -43,10 +43,14 @@ export interface ExternalMangaChapterRefDto {
   number: string;
   title?: string | null;
   createdAt?: string | null;
+  releaseStatus?: string | null;
+  accessLevel?: string | null;
+  coinCost?: number | null;
 }
 
 export interface ExternalMangaDetailDto extends ExternalMangaSummaryDto {
   chapters?: ExternalMangaChapterRefDto[];
+  categories?: ExternalMangaCategoryDto[];
 }
 
 export interface ExternalChapterPageDto {
@@ -54,11 +58,22 @@ export interface ExternalChapterPageDto {
   imageUrl: string;
 }
 
+export interface ExternalMangaCategoryDto {
+  id: string;
+  name: string;
+  slug: string;
+  type?: string | null;
+  isNsfw?: boolean | null;
+}
+
 export interface ExternalChapterDetailDto {
   id: string;
   mangaId?: string | null;
   number?: string | null;
   title?: string | null;
+  releaseStatus?: string | null;
+  accessLevel?: string | null;
+  coinCost?: number | null;
   pages: ExternalChapterPageDto[];
 }
 

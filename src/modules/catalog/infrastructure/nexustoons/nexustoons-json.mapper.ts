@@ -1,6 +1,7 @@
 import type {
   ExternalChapterDetailDto,
   ExternalChapterPageDto,
+  ExternalMangaCategoryDto,
   ExternalMangaChapterRefDto,
   ExternalMangaDetailDto,
   ExternalMangaSummaryDto,
@@ -12,6 +13,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+/** Retorna undefined para strings vazias (Nexustoons usa "" para campos ausentes). */
+function asNonEmptyString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim() !== '') return value;
+  return undefined;
 }
 
 function asNumber(value: unknown): number | undefined {
@@ -56,13 +63,19 @@ export function extractMangaArrayPayload(raw: unknown): unknown[] {
   return [];
 }
 
+function asStringOrNumber(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && !Number.isNaN(value)) return String(value);
+  return undefined;
+}
+
 export function mapToMangaSummary(
   raw: unknown,
 ): ExternalMangaSummaryDto | null {
   if (!isRecord(raw)) {
     return null;
   }
-  const id = asString(raw.id);
+  const id = asStringOrNumber(raw.id);
   const slug = asString(raw.slug);
   const title = asString(raw.title);
   const coverImage =
@@ -78,18 +91,18 @@ export function mapToMangaSummary(
     slug,
     title,
     coverImage,
-    alternativeTitles: asString(raw.alternativeTitles) ?? null,
-    description: asString(raw.description) ?? null,
-    bannerImage: asString(raw.bannerImage) ?? null,
-    status: asString(raw.status) ?? null,
-    type: asString(raw.type) ?? null,
+    alternativeTitles: asNonEmptyString(raw.alternativeTitles) ?? null,
+    description: asNonEmptyString(raw.description) ?? null,
+    bannerImage: asNonEmptyString(raw.bannerImage) ?? null,
+    status: asNonEmptyString(raw.status) ?? null,
+    type: asNonEmptyString(raw.type) ?? null,
     rating: asNumber(raw.rating) ?? null,
     views: asNumber(raw.views) ?? null,
     releaseYear: asNumber(raw.releaseYear) ?? null,
     isNsfw: asBoolean(raw.isNsfw) ?? null,
-    author: asString(raw.author) ?? null,
-    artist: asString(raw.artist) ?? null,
-    officialLink: asString(raw.officialLink) ?? null,
+    author: asNonEmptyString(raw.author) ?? null,
+    artist: asNonEmptyString(raw.artist) ?? null,
+    officialLink: asNonEmptyString(raw.officialLink) ?? null,
     lastChapterAt: asString(raw.lastChapterAt) ?? null,
   };
 }
@@ -98,7 +111,7 @@ function mapToChapterRef(raw: unknown): ExternalMangaChapterRefDto | null {
   if (!isRecord(raw)) {
     return null;
   }
-  const id = asString(raw.id);
+  const id = asStringOrNumber(raw.id);
   const number = asChapterNumber(raw.number);
   if (!id || number === undefined) {
     return null;
@@ -106,8 +119,27 @@ function mapToChapterRef(raw: unknown): ExternalMangaChapterRefDto | null {
   return {
     id,
     number,
-    title: asString(raw.title) ?? null,
+    title: asNonEmptyString(raw.title) ?? null,
     createdAt: asString(raw.createdAt) ?? null,
+    releaseStatus: asString(raw.releaseStatus) ?? null,
+    accessLevel: asString(raw.accessLevel) ?? null,
+    coinCost: asNumber(raw.coinCost) ?? null,
+  };
+}
+
+function mapToCategory(raw: unknown): ExternalMangaCategoryDto | null {
+  if (!isRecord(raw)) return null;
+  const nested = isRecord(raw.category) ? raw.category : raw;
+  const id = asStringOrNumber(nested.id);
+  const name = asNonEmptyString(nested.name);
+  const slug = asString(nested.slug);
+  if (!id || !name || !slug) return null;
+  return {
+    id,
+    name,
+    slug,
+    type: asString(nested.type) ?? null,
+    isNsfw: asBoolean(nested.isNsfw) ?? null,
   };
 }
 
@@ -119,6 +151,7 @@ export function mapToMangaDetail(raw: unknown): ExternalMangaDetailDto | null {
   if (!isRecord(raw)) {
     return base;
   }
+
   let chaptersRaw: unknown[] = [];
   const ch = raw.chapters;
   if (Array.isArray(ch)) {
@@ -129,7 +162,17 @@ export function mapToMangaDetail(raw: unknown): ExternalMangaDetailDto | null {
   const chapters = chaptersRaw
     .map((c) => mapToChapterRef(c))
     .filter((c): c is ExternalMangaChapterRefDto => c !== null);
-  return { ...base, chapters: chapters.length > 0 ? chapters : undefined };
+
+  const catsRaw = Array.isArray(raw.categories) ? raw.categories : [];
+  const categories = catsRaw
+    .map((c) => mapToCategory(c))
+    .filter((c): c is ExternalMangaCategoryDto => c !== null);
+
+  return {
+    ...base,
+    chapters: chapters.length > 0 ? chapters : undefined,
+    categories: categories.length > 0 ? categories : undefined,
+  };
 }
 
 function mapToPage(raw: unknown): ExternalChapterPageDto | null {
@@ -151,7 +194,7 @@ export function mapToChapterDetail(
   if (!isRecord(raw)) {
     return null;
   }
-  const id = asString(raw.id);
+  const id = asStringOrNumber(raw.id);
   if (!id) {
     return null;
   }
@@ -170,9 +213,12 @@ export function mapToChapterDetail(
     .sort((a, b) => a.pageNumber - b.pageNumber);
   return {
     id,
-    mangaId: asString(raw.mangaId) ?? null,
+    mangaId: asStringOrNumber(raw.mangaId) ?? null,
     number: asChapterNumber(raw.number) ?? null,
-    title: asString(raw.title) ?? null,
+    title: asNonEmptyString(raw.title) ?? null,
+    releaseStatus: asString(raw.releaseStatus) ?? null,
+    accessLevel: asString(raw.accessLevel) ?? null,
+    coinCost: asNumber(raw.coinCost) ?? null,
     pages: mapped,
   };
 }

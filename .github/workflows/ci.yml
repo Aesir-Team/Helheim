@@ -79,5 +79,8 @@ jobs:
       - name: Run migrations
         run: npx prisma migrate deploy
 
+      - name: Seed (plano gratuito + mangá demo E2E)
+        run: npm run db:seed
+
       - name: E2E tests
         run: npm run test:e2e

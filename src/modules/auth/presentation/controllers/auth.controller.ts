@@ -31,10 +31,7 @@ import {
   ConflictError,
   UnauthorizedError,
 } from '../../../../shared/domain/errors';
-
-interface AuthenticatedRequest {
-  user: { userId: string; email: string };
-}
+import type { AuthenticatedRequest } from '../types/authenticated-request';
 
 @ApiTags('Auth')
 @Controller('auth')

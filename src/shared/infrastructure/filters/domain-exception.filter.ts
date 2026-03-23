@@ -8,16 +8,21 @@ import {
 import { Response } from 'express';
 import {
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   UnauthorizedError,
 } from '../../domain/errors';
 
-@Catch(ConflictError, NotFoundError, UnauthorizedError)
+@Catch(ConflictError, ForbiddenError, NotFoundError, UnauthorizedError)
 export class DomainExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(DomainExceptionFilter.name);
 
   catch(
-    exception: ConflictError | NotFoundError | UnauthorizedError,
+    exception:
+      | ConflictError
+      | ForbiddenError
+      | NotFoundError
+      | UnauthorizedError,
     host: ArgumentsHost,
   ) {
     const ctx = host.switchToHttp();
@@ -27,8 +32,18 @@ export class DomainExceptionFilter implements ExceptionFilter {
         ? HttpStatus.CONFLICT
         : exception instanceof UnauthorizedError
           ? HttpStatus.UNAUTHORIZED
-          : HttpStatus.NOT_FOUND;
+          : exception instanceof ForbiddenError
+            ? HttpStatus.FORBIDDEN
+            : HttpStatus.NOT_FOUND;
     this.logger.warn(`${exception.name}: ${exception.message}`);
+    if (exception instanceof ForbiddenError) {
+      res.status(status).json({
+        statusCode: status,
+        message: exception.message,
+        reason: exception.reasonCode,
+      });
+      return;
+    }
     res.status(status).json({
       statusCode: status,
       message: exception.message,

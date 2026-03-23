@@ -21,9 +21,32 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+## Midgard Core API
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+API NestJS (catálogo de mangás/manhwas, acesso por plano, listas, progresso). Regras de negócio: `docs/PRODUTO-REGRAS-DE-NEGOCIO.md`. Plano de entrega: `docs/PLANO-MVP.md`.
+
+### Rotas do MVP
+
+Tabela resumida e decisão sobre capítulos **coin**: **`docs/API-ROTAS-MVP.md`**.
+
+### Rodar o MVP localmente
+
+```bash
+npm install
+cp .env.example .env   # DATABASE_URL + JWT_SECRET
+docker compose up -d postgres   # opcional
+npm run setup:dev-db    # ou: npx prisma migrate deploy && npm run db:seed
+npm run start:dev
+# Swagger: http://localhost:3000/docs
+```
+
+### Testes E2E (fluxo registro → catálogo → capítulo)
+
+Exige **`DATABASE_URL`** apontando para um Postgres com **migrations aplicadas** (`npx prisma migrate deploy`). O spec `mvp-flow` chama `ensureMvpFixtures` no `beforeAll` (plano gratuito + mangá `seed-mvp-demo`), então **não** é obrigatório rodar `db:seed` antes do E2E local.
+
+```bash
+npm run test:e2e
+```
 
 ## Project setup
 

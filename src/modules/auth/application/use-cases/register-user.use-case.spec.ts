@@ -110,6 +110,7 @@ describe('RegisterUserUseCase', () => {
     expect(tokenService.sign).toHaveBeenCalledWith({
       sub: 'user-1',
       email: 'test@example.com',
+      role: 'USER',
     });
     expect(result.user.id).toBe('user-1');
     expect(result.token).toBe('jwt-token');

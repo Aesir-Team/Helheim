@@ -15,6 +15,7 @@ import {
   mapToMangaDetail,
   mapToMangaSummary,
 } from './nexustoons-json.mapper';
+import { decryptResponse } from './orion-crypto';
 
 @Injectable()
 export class NexustoonsMangaGateway implements ExternalMangaGatewayPort {
@@ -81,39 +82,36 @@ export class NexustoonsMangaGateway implements ExternalMangaGatewayPort {
   }
 
   async getMangaBySlug(slug: string): Promise<ExternalMangaDetailDto | null> {
-    const encoded = encodeURIComponent(slug);
-    const url = `${this.baseUrl}/api/mangas/${encoded}`;
-    const res = await fetch(url, { method: 'GET' });
-    if (res.status === 404) {
-      return null;
-    }
-    if (!res.ok) {
-      throw new ExternalMangaGatewayHttpError(
-        `Nexustoons getMangaBySlug failed: ${res.status}`,
-        res.status,
-      );
-    }
-    const json: unknown = await res.json();
+    const json = await this.fetchJsonOrNull(
+      `${this.baseUrl}/api/manga/${encodeURIComponent(slug)}`,
+      'getMangaBySlug',
+    );
+    if (!json) return null;
     return mapToMangaDetail(json);
   }
 
   async getChapterById(
     chapterId: string,
   ): Promise<ExternalChapterDetailDto | null> {
-    const encoded = encodeURIComponent(chapterId);
-    const url = `${this.baseUrl}/api/chapter/${encoded}`;
+    const json = await this.fetchJsonOrNull(
+      `${this.baseUrl}/api/chapter/${encodeURIComponent(chapterId)}`,
+      'getChapterById',
+    );
+    if (!json) return null;
+    return mapToChapterDetail(json);
+  }
+
+  private async fetchJsonOrNull(url: string, label: string): Promise<unknown> {
     const res = await fetch(url, { method: 'GET' });
-    if (res.status === 404) {
-      return null;
-    }
+    if (res.status === 404) return null;
     if (!res.ok) {
       throw new ExternalMangaGatewayHttpError(
-        `Nexustoons getChapterById failed: ${res.status}`,
+        `Nexustoons ${label} failed: ${res.status}`,
         res.status,
       );
     }
-    const json: unknown = await res.json();
-    return mapToChapterDetail(json);
+    const raw: unknown = await res.json();
+    return decryptResponse(raw);
   }
 
   private async fetchJson(url: string, method: 'GET'): Promise<unknown> {
@@ -124,6 +122,7 @@ export class NexustoonsMangaGateway implements ExternalMangaGatewayPort {
         res.status,
       );
     }
-    return (await res.json()) as unknown;
+    const raw: unknown = await res.json();
+    return decryptResponse(raw);
   }
 }

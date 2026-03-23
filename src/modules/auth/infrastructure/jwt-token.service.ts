@@ -17,7 +17,12 @@ export class JwtTokenService implements TokenServicePort {
     const payload = await this.jwtService.verifyAsync<{
       sub: string;
       email: string;
+      role?: TokenPayload['role'];
     }>(token);
-    return { sub: payload.sub, email: payload.email };
+    return {
+      sub: payload.sub,
+      email: payload.email,
+      role: payload.role ?? 'USER',
+    };
   }
 }

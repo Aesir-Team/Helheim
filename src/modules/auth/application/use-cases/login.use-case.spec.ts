@@ -65,6 +65,11 @@ describe('LoginUseCase', () => {
     expect(hashService.compare).toHaveBeenCalledWith('plain', 'hashed');
     expect(result.token).toBe('jwt-token');
     expect(result.user.email).toBe('test@example.com');
+    expect(tokenService.sign).toHaveBeenCalledWith({
+      sub: 'user-1',
+      email: 'test@example.com',
+      role: 'USER',
+    });
   });
 
   it('deve lançar UnauthorizedError se email não existir', async () => {

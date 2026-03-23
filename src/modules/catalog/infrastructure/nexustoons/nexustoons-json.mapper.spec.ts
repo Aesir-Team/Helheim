@@ -79,7 +79,15 @@ describe('nexustoons-json.mapper', () => {
         chapters: [{ id: 'ch1', number: '1', title: 'Cap 1' }],
       });
       expect(d?.chapters).toEqual([
-        { id: 'ch1', number: '1', title: 'Cap 1', createdAt: null },
+        {
+          id: 'ch1',
+          number: '1',
+          title: 'Cap 1',
+          createdAt: null,
+          releaseStatus: null,
+          accessLevel: null,
+          coinCost: null,
+        },
       ]);
     });
   });
@@ -100,6 +108,9 @@ describe('nexustoons-json.mapper', () => {
         mangaId: 'm1',
         number: '5',
         title: null,
+        releaseStatus: null,
+        accessLevel: null,
+        coinCost: null,
         pages: [
           { pageNumber: 1, imageUrl: 'https://a.jpg' },
           { pageNumber: 2, imageUrl: 'https://b.jpg' },

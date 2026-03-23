@@ -59,6 +59,7 @@ export class RegisterUserUseCase {
     const token = await this.tokenService.sign({
       sub: user.id,
       email: user.email,
+      role: user.role,
     });
 
     const authUser: AuthUser = {

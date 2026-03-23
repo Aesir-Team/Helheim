@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import type { UserRole } from '../../domain/entities/user.entity';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -26,12 +27,17 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwtService.verifyAsync<{
         sub: string;
         email: string;
+        role?: UserRole;
       }>(token);
-      (request as Request & { user: { userId: string; email: string } }).user =
-        {
-          userId: payload.sub,
-          email: payload.email,
-        };
+      (
+        request as Request & {
+          user: { userId: string; email: string; role: UserRole };
+        }
+      ).user = {
+        userId: payload.sub,
+        email: payload.email,
+        role: payload.role ?? 'USER',
+      };
       return true;
     } catch {
       throw new UnauthorizedException('Token inválido ou expirado');

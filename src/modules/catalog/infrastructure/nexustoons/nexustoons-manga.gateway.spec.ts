@@ -123,7 +123,7 @@ describe('NexustoonsMangaGateway', () => {
   });
 
   describe('getMangaBySlug', () => {
-    it('usa /api/mangas/{slug}', async () => {
+    it('usa /api/manga/{slug}', async () => {
       fetchMock.mockResolvedValue(
         mockFetchResponse({
           id: '1',
@@ -136,7 +136,7 @@ describe('NexustoonsMangaGateway', () => {
       const m = await gateway.getMangaBySlug('solo-leveling');
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://nexustoons.com/api/mangas/solo-leveling',
+        'https://nexustoons.com/api/manga/solo-leveling',
         { method: 'GET' },
       );
       expect(m?.slug).toBe('solo-leveling');

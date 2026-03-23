@@ -32,3 +32,14 @@ export class UnauthorizedError extends DomainError {
     Object.setPrototypeOf(this, UnauthorizedError.prototype);
   }
 }
+
+export class ForbiddenError extends DomainError {
+  readonly reasonCode: string;
+
+  constructor(message: string, reasonCode: string) {
+    super(message);
+    this.reasonCode = reasonCode;
+    this.name = 'ForbiddenError';
+    Object.setPrototypeOf(this, ForbiddenError.prototype);
+  }
+}

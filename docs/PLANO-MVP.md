@@ -70,7 +70,10 @@ npm run db:seed             # plano gratuito
 | `ExternalMangaGatewayPort` + `NexustoonsMangaGateway` (adapter HTTP) | **Feito** (testes unitários passando) |
 | `CatalogInfrastructureModule` registrado em `AppModule` | **Feito** |
 | `AccessApplicationModule` (`GetEffectivePlanUseCase`, ports Plan/Subscription) | **Feito** (Fase A.2 — testes passando) |
-| Módulos `catalog` (use cases, controllers), `access` (controllers), `lists`, `progress` | **A fazer** (Fases B-F) |
+| `CatalogApplicationModule` + `CatalogController` + `ChapterReadingController` (Fases B–D) | **Feito** (`GET /chapters/:id` com JWT, cota semanal + consume) |
+| `ListsApplicationModule` + rotas `users/me/lists` (Fase E) | **Feito** |
+| `ProgressApplicationModule` + `GET/PATCH .../reading-progress` (Fase F) | **Feito** |
+| Fase G (E2E, `docs/API-ROTAS-MVP.md`, CI com seed, catálogo sem `coin`) | **Feito** |
 
 ---
 
@@ -90,89 +93,91 @@ npm run db:seed             # plano gratuito
 
 ---
 
-### Fase B — Catálogo (P0)
+### Fase B — Catálogo (P0) — CONCLUÍDA
 
 **Objetivo:** expor mangás, capítulos e páginas conforme `PRODUTO-REGRAS-DE-NEGOCIO` §3.2 e §3.3.
 
-| # | Entrega | Detalhes | TDD |
-|---|---------|----------|-----|
-| B.1 | Repositórios Prisma | `Manga`, `Chapter`, `ChapterPage`, `Category`, `MangaCategory`, `MangaExternalSource`. | Ports com fake nos testes |
-| B.2 | `ListMangasUseCase` | Paginação, filtros básicos (tipo, status, categoria); excluir `deletedAt`. | Sim |
-| B.3 | `GetMangaBySlugUseCase` | Detalhe + preview de capítulos; opcional flags de leitura se usuário logado (integração na Fase D). | Sim |
-| B.4 | `ListChaptersByMangaSlugUseCase` | Ordenação recent/oldest; só `published`; excluir soft-deleted. | Sim |
+| # | Entrega | Detalhes | Status |
+|---|---------|----------|--------|
+| B.1 | ~~Repositórios Prisma~~ | Ports (`MangaRepositoryPort`, `ChapterRepositoryPort`, `CategoryRepositoryPort`) + adapters Prisma. | **Feito** |
+| B.2 | ~~`ListMangasUseCase`~~ | Paginação, filtros (tipo, status, categoria, search, sortBy, nsfw); cap 100/page. 3 testes. | **Feito** |
+| B.3 | ~~`GetMangaBySlugUseCase`~~ | Detalhe + preview capítulos; sync automático se não existe no BD; background re-sync se stale >24h. 4 testes. | **Feito** |
+| B.4 | ~~`ListChaptersUseCase`~~ | Ordenação asc/desc; só published; excluir soft-deleted; cap 200/page. 3 testes. | **Feito** |
 | B.5 | ~~Gateway externo (port)~~ | `ExternalMangaGatewayPort` + `NexustoonsMangaGateway` + testes unitários. | **Feito** |
-| B.6 | `SyncMangaFromSourceUseCase` | Persistir metadados + capítulos + páginas; respeitar `Manga.syncStatus` / por `MangaExternalSource`; não bloquear request principal (job/`setImmediate`/fila). | Sim |
-| B.7 | Fluxo "não existe no BD" | Orquestrar sync na primeira busca por slug; 404 se fonte não tiver. | Sim / E2E |
-| B.8 | Controllers + DTOs + Swagger | `GET /mangas`, `GET /mangas/:slug`, `GET /mangas/:slug/chapters`, `GET /categories` alinhados ao contrato MVP. | — |
+| B.6 | ~~`SyncMangaFromSourceUseCase`~~ | Persiste metadados + capítulos + páginas; respeita `syncStatus` (skip se syncing); error handling com status. 4 testes. | **Feito** |
+| B.7 | ~~Fluxo "não existe no BD"~~ | Integrado em `GetMangaBySlugUseCase`: sync na primeira busca; `NotFoundError` se fonte não tiver. | **Feito** |
+| B.8 | ~~Controllers + DTOs + Swagger~~ | `GET /mangas`, `GET /mangas/:slug`, `GET /mangas/:slug/chapters`, `GET /categories` + `ListCategoriesUseCase` + `CatalogApplicationModule`. | **Feito** |
 
-**Critério de aceite:** front consegue montar Home, Busca, Detalhe e Lista de capítulos só com a API (dados reais ou seed).
+**Critério de aceite:** front consegue montar Home, Busca, Detalhe e Lista de capítulos só com a API (dados reais ou seed). **Testes unitários passando, lint ok, build ok.**
 
 ---
 
-### Fase C — Leitura do capítulo sem regra de cota (P0 técnico)
+### Fase C — Leitura do capítulo sem regra de cota (P0 técnico) — CONCLUÍDA
 
 **Objetivo:** entregar `GET /chapters/:id` com páginas + prev/next **antes** de embutir consumo semanal, para destravar integração do viewer.
 
 | # | Entrega | Detalhes | TDD |
 |---|---------|----------|-----|
-| C.1 | `GetChapterForReadingUseCase` | Retornar metadados + `pages` ordenadas; prev/next resolvidos via `ORDER BY number` (sem linked list no schema). | Sim |
-| C.2 | Controller + Swagger | `GET /chapters/:id` | — |
+| C.1 | ~~`GetChapterForReadingUseCase`~~ | Metadados + `pages` ordenadas; `findNeighborChapterIds` no port (ordenação por `number`, sem linked list). Testes unitários. | **Feito** |
+| C.2 | ~~Controller + Swagger~~ | `GET /api/v1/chapters/:id` (`ChapterReadingController` + `ChapterForReadingResponseDto`). | **Feito** |
 
 **Nota:** na Fase D este use case passa a chamar **CheckAccess** + **Consume** antes de devolver páginas.
 
 ---
 
-### Fase D — Acesso (limite semanal) (P0)
+### Fase D — Acesso (limite semanal) (P0) — CONCLUÍDA
 
 **Objetivo:** `PRODUTO-REGRAS-DE-NEGOCIO` §3.4.
 
-| # | Entrega | Detalhes | TDD |
-|---|---------|----------|-----|
-| D.1 | `CheckChapterAccessUseCase` | Entrada: `userId`, `chapterId`. Saída: `allowed`, `reason`. Regras: role VIP/ADMIN/MODERATOR -> liberado; plano com `freeChaptersPerWeek === null` -> liberado; senão contar `UserChapterWeekAccess` na `weekStart` atual; capítulo `coin` no MVP pode ser **bloqueado** ou tratado como "em breve" (definir decisão única). | Sim |
-| D.2 | `ConsumeWeeklyChapterAccessUseCase` | Se permitido e capítulo `public`, criar registro idempotente `(userId, chapterId, weekStart)`. | Sim |
-| D.3 | Integrar em `GetChapterForReadingUseCase` | Se não autenticado -> 401; se não permitido -> 403 com corpo claro; se permitido -> consume + retorno das páginas. | Sim |
-| D.4 | Ajuste de listagens | Capítulos/mangá podem expor `isUnlocked` / contagem usada na semana para o front (opcional endpoint `GET /users/me/access-summary`). | Opcional |
+| # | Entrega | Detalhes | Status |
+|---|---------|----------|--------|
+| D.1 | ~~`CheckChapterAccessUseCase`~~ | Entrada: `userId`, `role`, `chapterId`, `accessLevel`. Saída: `allowed`, `reason`. VIP/ADMIN/MODERATOR → liberado; plano ilimitado → liberado; `coin` → bloqueado no MVP (`coin_chapter_not_available`); senão cota por `UserChapterWeekAccess` + `weekStart` (segunda UTC). | **Feito** |
+| D.2 | ~~`ConsumeWeeklyChapterAccessUseCase`~~ | Capítulo `public` + idempotência `(userId, chapterId, weekStart)`. | **Feito** |
+| D.3 | ~~Integração em `GetChapterForReadingUseCase`~~ | JWT obrigatório em `GET /chapters/:id`; 403 `ForbiddenError` + `reason` no filtro global. | **Feito** |
+| D.4 | Ajuste de listagens | `GET /users/me/access-summary` / `isUnlocked` nas listagens — **opcional, não feito**. | Opcional |
 
 **Critério de aceite:** usuário free após N capítulos distintos na semana recebe 403 ao abrir novo capítulo `public`; mesmo capítulo reaberto na mesma semana não consome nova unidade.
 
 ---
 
-### Fase E — Listas (P1)
+### Fase E — Listas (P1) — CONCLUÍDA
 
 **Objetivo:** §3.5.
 
-| # | Entrega | Detalhes | TDD |
-|---|---------|----------|-----|
-| E.1 | Ports + repositório `UserMangaList` / `UserMangaListItem` | Validação: `listId` pertence ao `userId`. | Sim |
-| E.2 | CRUD listas | Criar, renomear, excluir, ordenar (se necessário). | Sim |
-| E.3 | Itens | Adicionar/remover mangá; impedir duplicata no mesmo par lista+mangá. | Sim |
-| E.4 | Controllers + Swagger | Rotas com prefixo `users/me/lists`. | — |
+| # | Entrega | Detalhes | Status |
+|---|---------|----------|--------|
+| E.1 | ~~Ports + repositório~~ | `USER_MANGA_LIST_REPOSITORY` + `PrismaUserMangaListRepository`; ownership em todas as operações. | **Feito** |
+| E.2 | ~~CRUD listas~~ | Criar, renomear (`name` / `sortOrder`), excluir; `PATCH users/me/lists/reorder` com permutação completa dos IDs. | **Feito** |
+| E.3 | ~~Itens~~ | POST/DELETE itens; duplicata `(listId, mangaId)` → 409; valida mangá via `MangaRepositoryPort.findByIdForListItem`. | **Feito** |
+| E.4 | ~~Controllers + Swagger~~ | `GET/POST /users/me/lists`, `GET/PATCH/DELETE /users/me/lists/:listId`, `PATCH .../reorder`, `POST/DELETE .../items` (+ `:mangaId`). JWT. | **Feito** |
 
 **Critério de aceite:** usuário A não lê nem altera listas de B.
 
 ---
 
-### Fase F — Progresso / continuar lendo (P1)
+### Fase F — Progresso / continuar lendo (P1) — CONCLUÍDA
 
 **Objetivo:** §3.6.
 
-| # | Entrega | Detalhes | TDD |
-|---|---------|----------|-----|
-| F.1 | `SaveReadingProgressUseCase` | Upsert por `(userId, mangaId)`; atualizar `chapterId`, `pageNumber`, `lastReadAt`, `chaptersReadCount` conforme regra de produto. | Sim |
-| F.2 | `GetContinueReadingUseCase` | Lista ordenada por `lastReadAt` (limite N). | Sim |
-| F.3 | Controllers + Swagger | `GET/PATCH .../reading-progress` (ou PUT) alinhado ao mock MVP. | — |
-| F.4 | (Opcional) Atualizar `mangasReadCount` nas listas | Job ou hook após salvar progresso. | Depois |
+| # | Entrega | Detalhes | Status |
+|---|---------|----------|--------|
+| F.1 | ~~`SaveReadingProgressUseCase`~~ | Upsert `ReadingProgress`; valida mangá + capítulo publicado; **invariante** `chapter.mangaId === mangaId`; idempotente se `chapterId`+`pageNumber`+`chaptersReadCount` iguais; sem `chaptersReadCount` no body → mantém no mesmo capítulo ou +1 ao mudar de capítulo. | **Feito** |
+| F.2 | ~~`GetContinueReadingUseCase`~~ | Lista por `lastReadAt` desc; `limit` 1–100 (padrão 20); omite mangá/capítulo soft-deleted ou capítulo não publicado. | **Feito** |
+| F.3 | ~~Controllers + Swagger~~ | JWT: `GET /users/me/reading-progress?limit=`, `PATCH /users/me/reading-progress` (body: `mangaId`, `chapterId`, `pageNumber?`, `chaptersReadCount?`). `CHAPTER_REPOSITORY` exportado no catálogo. | **Feito** |
+| F.4 | Atualizar `mangasReadCount` nas listas | Job ou hook após salvar progresso. | **Depois** (opcional) |
+
+**Critério de aceite:** um registro por `(usuário, mangá)`; PATCH repetido com os mesmos dados não altera o estado.
 
 ---
 
-### Fase G — Encerramento MVP (qualidade)
+### Fase G — Encerramento MVP (qualidade) — CONCLUÍDA
 
-| # | Entrega | Detalhes |
-|---|---------|----------|
-| G.1 | E2E | Fluxos: registro -> login -> listar mangás -> slug -> capítulo (com seed). |
-| G.2 | Documentação | Atualizar tabela de rotas com status; README "como rodar MVP". |
-| G.3 | CI | Lint, test, build, migrate em pipeline (já existente: validar após novos módulos). |
-| G.4 | Decisão produto: capítulos `accessLevel = coin` no MVP | Ou esconder no catálogo, ou retornar 402/403 com mensagem até módulo Coins. |
+| # | Entrega | Detalhes | Status |
+|---|---------|----------|--------|
+| G.1 | ~~E2E~~ | `test/mvp-flow.e2e-spec.ts`: `ensureMvpFixtures` no `beforeAll` → registro → listagem → slug → capítulos → `GET /chapters/:id` com JWT; `test/app.e2e-spec.ts` health; `test/create-e2e-app.ts` + filtro de domínio. `prisma/mvp-fixtures.ts` compartilhado com `db:seed`. | **Feito** |
+| G.2 | ~~Documentação~~ | `docs/API-ROTAS-MVP.md` (tabela de rotas + G.4); README com MVP, link e `test:e2e`. | **Feito** |
+| G.3 | ~~CI~~ | `.github/workflows/ci.yml`: lint, unit, build; job e2e com Postgres, `migrate deploy`, **`npm run db:seed`**, `test:e2e`. | **Feito** |
+| G.4 | ~~Decisão `coin`~~ | **Listagem/preview:** só `public` (`PrismaChapterRepository.listByMangaSlug`, detalhe mangá). **Leitura:** 403 `coin_chapter_not_available` (já na Fase D). | **Feito** |
 
 ---
 
@@ -187,7 +192,7 @@ B (catálogo) ───────┼──► C (chapter read) ──► D (ac
                     └──► F (progresso)  [paralelo; precisa B para manga/chapter válidos]
 ```
 
-**Ordem linear sugerida:** **A -> B -> C -> D -> E -> F -> G**.
+**Ordem linear sugerida:** **A → B → C → D → E → F → G** (D–G concluídas no repositório).
 
 ---
 
@@ -214,6 +219,7 @@ B (catálogo) ───────┼──► C (chapter read) ──► D (ac
 ## 8. Referências
 
 - `docs/PRODUTO-REGRAS-DE-NEGOCIO.md` — regras de negócio (fonte de verdade PO).
+- `docs/API-ROTAS-MVP.md` — rotas do MVP e decisão capítulos `coin`.
 - `docs/NEXUSTOONS-GATEWAY.md` — documentação do adapter externo.
 - `prisma/schema.prisma` — modelo de dados.
 - `.cursor/rules/midgard-core-api.mdc` — regras operacionais do projeto.

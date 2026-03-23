@@ -13,6 +13,7 @@ import { PrismaModule } from '../../../shared/infrastructure/prisma/prisma.modul
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AccessApplicationModule } from '../../access/application/access.application.module';
+import { JwtAuthGuard } from '../presentation/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AccessApplicationModule } from '../../access/application/access.applica
     }),
   ],
   providers: [
+    JwtAuthGuard,
     RegisterUserUseCase,
     LoginUseCase,
     GetProfileUseCase,
@@ -38,6 +40,7 @@ import { AccessApplicationModule } from '../../access/application/access.applica
   ],
   exports: [
     JwtModule,
+    JwtAuthGuard,
     RegisterUserUseCase,
     LoginUseCase,
     GetProfileUseCase,
