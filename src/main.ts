@@ -103,6 +103,8 @@ async function bootstrap() {
 
   const bootstrapLogger = new Logger('Bootstrap');
   bootstrapLogger.log('🚀 API Documentation:');
-  bootstrapLogger.log(`   ✨ Scalar API Reference: http://localhost:${port}/docs`);
+  bootstrapLogger.log(
+    `   ✨ Scalar API Reference: http://localhost:${port}/docs`,
+  );
 }
 void bootstrap();

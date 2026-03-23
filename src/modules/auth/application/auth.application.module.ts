@@ -12,10 +12,12 @@ import { BcryptHashService } from '../infrastructure/bcrypt-hash.service';
 import { PrismaModule } from '../../../shared/infrastructure/prisma/prisma.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AccessApplicationModule } from '../../access/application/access.application.module';
 
 @Module({
   imports: [
     PrismaModule,
+    AccessApplicationModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({

@@ -31,6 +31,19 @@
 $ npm install
 ```
 
+### Banco de dados (Prisma)
+
+```bash
+cp .env.example .env   # configure DATABASE_URL e JWT_SECRET (URL do Docker: comentário no .env.example)
+docker compose up -d postgres   # Postgres local (opcional)
+npm run setup:dev-db   # migrations + seed (requer Docker + .env)
+# ou manualmente:
+npx prisma migrate deploy
+npm run db:seed        # plano gratuito (slug gratuito, 5 cap./semana)
+```
+
+Variáveis: ver `.env.example`. Plano de pré-requisitos: `docs/PLANO-MVP.md` §2. Documentação de negócio: `docs/PRODUTO-REGRAS-DE-NEGOCIO.md`.
+
 ## Compile and run the project
 
 ```bash

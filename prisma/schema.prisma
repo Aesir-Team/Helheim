@@ -45,7 +45,6 @@ model User {
   takedownRequestsSubmitted TakedownRequest[]  @relation("TakedownRequester")
 
   @@index([email])
-  @@index([id])
   @@map("users")
 }
 
@@ -66,6 +65,14 @@ enum MangaSyncStatus {
   idle
   syncing
   error
+}
+
+/// Provedor externo de dados (cada mangá pode ter N linhas em MangaExternalSource).
+enum ExternalSourceProvider {
+  NEXUSTOONS
+  MANGADEX
+  CUSTOM_A
+  CUSTOM_B
 }
 
 enum CategoryType {
@@ -108,12 +115,14 @@ model Manga {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  /// Scrape/sync com API de terceiros: 1x por dia o primeiro que abrir este mangá dispara a atualização.
-  externalId       String?   /// ID ou slug na API de origem (ex.: Nexustoons).
-  lastSyncedAt     DateTime? /// Última vez que buscamos dados/capítulos da fonte.
-  syncStatus       MangaSyncStatus @default(idle) /// Evita dois usuários dispararem sync ao mesmo tempo.
+  /// @deprecated — Campos legados / espelho da fonte principal (maior priority em MangaExternalSource).
+  /// Novos fluxos devem usar `externalSources`; estes podem ser preenchidos pelo job de sync para índices e queries simples.
+  externalId       String?   /// @deprecated ID ou slug na fonte principal (redundante com MangaExternalSource).
+  lastSyncedAt     DateTime? /// Última sync agregada (ex.: da fonte com maior priority que rodou com sucesso).
+  syncStatus       MangaSyncStatus @default(idle) /// Estado global do mangá para evitar dois syncs pesados ao mesmo tempo.
   lastSyncError    String?   @db.Text /// Mensagem do último erro (se syncStatus == error).
 
+  externalSources MangaExternalSource[]
   categories      MangaCategory[]
   chapters        Chapter[]
   listItems       UserMangaListItem[]
@@ -142,6 +151,31 @@ model MangaCategory {
   @@map("manga_categories")
 }
 
+/// Um mesmo mangá (entidade canônica no Midgard) pode existir em várias APIs/scrapers.
+/// Cada linha = mapeamento (provider + externalId) + estado de sync isolado por fonte.
+model MangaExternalSource {
+  id            String                @id @default(uuid())
+  mangaId       String
+  provider      ExternalSourceProvider
+  /// ID ou slug desse mangá na API do provedor.
+  externalId    String
+  /// Maior número = tentar primeiro no sync / fallback (ex.: 100 fonte A, 50 fonte B).
+  priority      Int                   @default(0)
+  isActive      Boolean               @default(true)
+  lastSyncedAt  DateTime?
+  syncStatus    MangaSyncStatus       @default(idle)
+  lastSyncError String?               @db.Text
+
+  manga Manga @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+
+  /// Um mangá não repete o mesmo provedor; o par (provedor, id externo) é único no ecossistema.
+  @@unique([mangaId, provider])
+  @@unique([provider, externalId])
+  @@index([mangaId])
+  @@index([mangaId, priority])
+  @@map("manga_external_sources")
+}
+
 // ============== Capítulos ==============
 
 enum ReleaseStatus {
@@ -155,6 +189,9 @@ enum AccessLevel {
   coin
 }
 
+/// Navegação prev/next: usar ORDER BY number com @@unique([mangaId, number]).
+/// Não usamos linked list (previousChapterId/nextChapterId) porque complica o sync de fontes externas
+/// e gera conflitos de unique em inserções concorrentes.
 model Chapter {
   id                String        @id @default(uuid())
   mangaId           String
@@ -168,15 +205,7 @@ model Chapter {
   updatedAt         DateTime      @updatedAt
   deletedAt         DateTime?
 
-  // Navegação anterior/próximo (ordenação por manga + number)
-  previousChapterId String?  @unique
-  nextChapterId     String?  @unique
-
-  manga                    Manga         @relation(fields: [mangaId], references: [id], onDelete: Cascade)
-  previousChapter          Chapter?      @relation("PrevChapter", fields: [previousChapterId], references: [id], onDelete: SetNull)
-  nextChapter              Chapter?      @relation("NextChapter", fields: [nextChapterId], references: [id], onDelete: SetNull)
-  chapterWithThisAsPrev    Chapter?      @relation("PrevChapter")
-  chapterWithThisAsNext    Chapter?      @relation("NextChapter")
+  manga           Manga         @relation(fields: [mangaId], references: [id], onDelete: Cascade)
   pages           ChapterPage[]
   weekAccesses    UserChapterWeekAccess[]
   coinUnlocks     UserChapterCoinUnlock[]
@@ -184,8 +213,6 @@ model Chapter {
 
   @@unique([mangaId, number])
   @@index([mangaId])
-  @@index([previousChapterId])
-  @@index([nextChapterId])
   @@index([createdAt])
   @@map("chapters")
 }
@@ -211,6 +238,7 @@ enum BillingInterval {
 
 /// Planos de assinatura (ex.: gratuito, premium).
 /// freeChaptersPerWeek: null = ilimitado (assinante); número = limite semanal no plano gratuito.
+/// Sem deletedAt: desativação via `isActive = false`; plano permanece para histórico de Subscription.
 model Plan {
   id                  String          @id @default(uuid())
   name                String
@@ -239,6 +267,8 @@ enum SubscriptionStatus {
 }
 
 /// Assinatura do usuário a um plano (histórico: uma por período ativo).
+/// INVARIANTE: no máximo UMA subscription com status='active' por userId — validar no use case.
+/// Prisma não suporta partial unique index; garantir via lógica de aplicação ou raw SQL.
 model Subscription {
   id         String             @id @default(uuid())
   userId     String
@@ -303,7 +333,7 @@ model UserChapterWeekAccess {
   id        String   @id @default(uuid())
   userId    String
   chapterId String
-  /// Início da semana (segunda-feira 00:00:00 UTC).
+  /// Início da semana ISO 8601 (segunda-feira 00:00:00 UTC). Calculado pelo use case; não receber do cliente.
   weekStart DateTime
   createdAt DateTime @default(now())
 
@@ -367,7 +397,8 @@ model CoinTransaction {
   userId      String
   amount      Int
   type        CoinTransactionType
-  balanceAfter Int?
+  /// Saldo do usuário após esta transação. Sempre preenchido pelo use case para garantir auditoria.
+  balanceAfter Int          @default(0)
   /// Referência: chapterId (unlock), paymentId (refund), etc.
   referenceId String?
   referenceType String?
@@ -419,6 +450,7 @@ model UserMangaListItem {
 
 /// Progresso de leitura por mangá: último capítulo e página para "continuar lendo".
 /// Um registro por (usuário, mangá); ao avançar no mesmo mangá, atualiza este registro.
+/// INVARIANTE: chapterId DEVE pertencer ao mangaId — validar no use case (o BD não garante).
 model ReadingProgress {
   id               String   @id @default(uuid())
   userId           String
@@ -448,6 +480,9 @@ enum TakedownRequestStatus {
 }
 
 /// Pedido de retirada de mangá/manhua do catálogo (notice & takedown; requer usuário logado).
+/// onDelete Restrict em requester e manga: intencional — pedidos de takedown NUNCA devem ser
+/// apagados silenciosamente ao deletar usuário ou mangá (rastreabilidade jurídica).
+/// Para desativar um mangá, usar soft delete (deletedAt); para desativar conta, idem.
 model TakedownRequest {
   id                 String                @id @default(uuid())
   requesterId        String                /// Usuário logado que enviou o pedido

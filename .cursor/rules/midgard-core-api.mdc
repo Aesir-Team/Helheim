@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Midgard Core API – Regras do projeto
 
-Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `docs/SCHEMA-REVIEW.md`. Resumo obrigatório:
+Seguir sempre os documentos `docs/PRODUTO-REGRAS-DE-NEGOCIO.md`, `docs/PLANO-MVP.md` e `docs/NEXUSTOONS-GATEWAY.md`. Resumo obrigatório:
 
 ---
 
@@ -85,10 +85,11 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 ## 9. Schema Prisma
 
-- Respeitar o schema em `prisma/schema.prisma`: User (coinsBalance), Manga (externalId, lastSyncedAt, syncStatus), Chapter (accessLevel, coinCost), Plan, Subscription (snapshot), Payment (idempotencyKey), UserChapterWeekAccess, UserChapterCoinUnlock, CoinTransaction, AdRewardClaim, UserMangaList, UserMangaListItem, ReadingProgress, TakedownRequest (notice & takedown).
-- Soft delete onde definido (deletedAt em User, Manga, Chapter).
+- Respeitar o schema em `prisma/schema.prisma`: User (coinsBalance), Manga (externalId deprecated, externalSources), Chapter (accessLevel, coinCost — sem linked list prev/next), Plan, Subscription (snapshot, max 1 ativa por user), Payment (idempotencyKey), UserChapterWeekAccess (weekStart ISO 8601), UserChapterCoinUnlock, CoinTransaction (balanceAfter obrigatório), AdRewardClaim, UserMangaList, UserMangaListItem, ReadingProgress (validar chapterId ∈ mangaId), TakedownRequest (onDelete Restrict intencional).
+- Soft delete onde definido (deletedAt em User, Manga, Chapter); Plan usa `isActive` em vez de soft delete.
 - Índices e uniques já definidos no schema; evitar filtros em colunas não indexadas.
 - Novas entidades: manter enums para status, uniques onde fizer sentido, relações com onDelete explícito.
+- **Navegação de capítulos:** resolver prev/next via `ORDER BY number` com `@@unique([mangaId, number])`; não usar linked list.
 
 ---
 
@@ -98,6 +99,11 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 - **Idempotência:** ConsumeWeeklyChapterAccess, ad-reward e “registrar progresso” idempotentes (unique + upsert).
 - **Auth:** JWT em guard; em todo use case que recebe `userId`, validar que o recurso pertence ao usuário (listas, progresso, coins).
 - **Webhooks/pagamentos:** sempre usar `idempotencyKey` para evitar processar o mesmo evento duas vezes.
+- **Invariantes sem constraint no BD (validar no use case):**
+  - `Subscription`: no máximo 1 ativa por `userId` (Prisma não suporta partial unique).
+  - `ReadingProgress.chapterId` deve pertencer ao `mangaId` do mesmo registro.
+  - `UserChapterWeekAccess.weekStart` calculado pelo servidor (ISO 8601, segunda 00:00 UTC), nunca do cliente.
+  - `CoinTransaction.balanceAfter` sempre preenchido com o saldo real pós-operação.
 
 ---
 
@@ -105,16 +111,26 @@ Seguir sempre os documentos `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md` e `d
 
 - **MVP (P0/P1):** Auth (registro, login, perfil), Catalog (listar, detalhe mangá, detalhe capítulo, sync banco→fallback scrape), Access (limite semanal + bloqueio), Lists (CRUD listas, add/remove mangá), Progress (salvar, “continuar lendo”).
 - **Depois do MVP:** Coins (ad-reward, desbloqueio), Payments (Mercado Pago, webhooks), notificações, admin, busca avançada.
-- Ao implementar, seguir a ordem sugerida: estrutura → Auth → Catalog → Access → Coins → Lists → Progress → Polish.
+- Ao implementar, seguir a ordem sugerida: Auth → Catalog (+ sync) → Chapter Read → Access (limite semanal) → Lists → Progress → **pós-MVP:** Coins → Payments → Takedown.
 
 ---
 
-## 12. TDD e testes
+## 12. BDD + TDD — antes de qualquer mudança
 
-- **Sempre TDD:** escrever **testes primeiro**, depois o código. Nunca implementar a funcionalidade completa e só depois testar; red → green → refactor.
-- Ordem: definir o comportamento esperado (teste falha) → implementar o mínimo para passar → refatorar se necessário.
-- Use cases testados com ports mockados/fake; não depender de Prisma real nos unitários.
-- Controllers: só recebem request, chamam use case, devolvem response (testes cobrem o fluxo controller → use case com mocks).
+Ordem **obrigatória** ao implementar ou alterar comportamento (use cases, adapters, regras de negócio, controllers com lógica):
+
+1. **BDD (comportamento):** descrever o cenário em linguagem de negócio **antes** de codar — no mínimo no `describe`/`it` (Given/When/Then implícito ou em comentário), ou em `docs/` / issue vinculada. Alinhar com `PRODUTO-REGRAS-DE-NEGOCIO.md` e critérios de aceite.
+2. **TDD:** escrever o **teste automatizado que falha** (red) → implementar o **mínimo** para passar (green) → **refatorar** mantendo os testes verdes.
+3. **Proibido:** “implementar tudo e testar depois” em fluxo novo ou alteração de regra; exceção pontual só para spike descartável, depois apagar e refazer com TDD.
+
+**Onde testar**
+
+- **Use cases:** unitário com ports **mock/fake**; sem Prisma real.
+- **Adapters (HTTP, Prisma):** unitário com `fetch`/client mockado ou testcontainers só quando necessário; preferir contratos estáveis no port.
+- **Controllers:** teste de integração leve ou e2e: request → use case mockado; validação de DTO e status HTTP.
+- **Mappers puros:** testes unitários diretos (entrada JSON → DTO).
+
+**BDD em API:** quando fizer sentido, cenários Gherkin podem viver em `test/bdd/` ou na descrição do e2e; o repositório exige no mínimo **testes** que documentem o comportamento esperado.
 
 ## 13. Documentação
 
@@ -136,4 +152,4 @@ Referência: documentação interativa em `/docs` (Scalar); OpenAPI JSON em `/ap
 
 ---
 
-Referência completa: `docs/MVP-GUIDE.md`, `docs/PROJECT-OVERVIEW.md`, `docs/SCHEMA-REVIEW.md`.
+Referência completa: `docs/PRODUTO-REGRAS-DE-NEGOCIO.md`, `docs/PLANO-MVP.md`, `docs/NEXUSTOONS-GATEWAY.md`.
