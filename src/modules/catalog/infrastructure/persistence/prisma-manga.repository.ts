@@ -16,6 +16,10 @@ import type {
   MangaStatus,
   CategoryType,
 } from '@prisma/client';
+import {
+  normalizeMangaStatusFromExternal,
+  normalizeMangaTypeFromExternal,
+} from '../../../../shared/domain/manga-external.normalization';
 
 @Injectable()
 export class PrismaMangaRepository implements MangaRepositoryPort {
@@ -162,17 +166,22 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
   }
 
   async upsertBySlug(input: UpsertMangaInput): Promise<{ id: string }> {
+    const type = normalizeMangaTypeFromExternal(input.type) as MangaType;
+    const status = normalizeMangaStatusFromExternal(
+      input.status,
+    ) as MangaStatus;
+
     const row = await this.prisma.manga.upsert({
       where: { slug: input.slug },
       create: {
         slug: input.slug,
         title: input.title,
         coverImage: input.coverImage,
-        type: (input.type as MangaType) || 'manhwa',
+        type,
         alternativeTitles: input.alternativeTitles ?? null,
         description: input.description ?? null,
         bannerImage: input.bannerImage ?? null,
-        status: (input.status as MangaStatus) ?? 'ongoing',
+        status,
         rating: input.rating ?? 0,
         views: input.views ?? 0,
         releaseYear: input.releaseYear ?? null,
@@ -186,10 +195,11 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
       update: {
         title: input.title,
         coverImage: input.coverImage,
+        type,
         alternativeTitles: input.alternativeTitles ?? undefined,
         description: input.description ?? undefined,
         bannerImage: input.bannerImage ?? undefined,
-        status: input.status ? (input.status as MangaStatus) : undefined,
+        status,
         rating: input.rating ?? undefined,
         views: input.views ?? undefined,
         releaseYear: input.releaseYear ?? undefined,

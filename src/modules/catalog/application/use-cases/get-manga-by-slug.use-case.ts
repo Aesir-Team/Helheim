@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   MANGA_REPOSITORY,
   type MangaRepositoryPort,
@@ -9,36 +9,53 @@ import {
   type ExternalMangaGatewayPort,
 } from '../ports/external-manga-gateway.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
-
-const SYNC_STALE_MS = 24 * 60 * 60 * 1000; // 24h
+import { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
 
 @Injectable()
 export class GetMangaBySlugUseCase {
+  private readonly logger = new Logger(GetMangaBySlugUseCase.name);
+
   constructor(
     @Inject(MANGA_REPOSITORY)
     private readonly mangaRepo: MangaRepositoryPort,
     @Inject(EXTERNAL_MANGA_GATEWAY)
     private readonly gateway: ExternalMangaGatewayPort,
+    private readonly syncMangaFromSource: SyncMangaFromSourceUseCase,
   ) {}
 
   async execute(slug: string): Promise<MangaDetailDto> {
-    const existing = await this.mangaRepo.findBySlug(slug);
-
-    if (existing) {
-      this.triggerBackgroundSyncIfStale(slug).catch(() => {});
-      return existing;
+    const normalized = slug.trim();
+    if (!normalized) {
+      throw new NotFoundError('Manga slug is required');
     }
 
-    return this.syncAndReturn(slug);
+    await this.ingestExternalMangaBySlug(normalized);
+
+    const persisted = await this.mangaRepo.findBySlug(normalized);
+    if (!persisted) {
+      throw new NotFoundError(`Manga "${normalized}" not found`);
+    }
+
+    setImmediate(() => {
+      void this.syncMangaFromSource.execute(normalized).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.debug(
+          `Background chapter sync failed (slug=${normalized}): ${message}`,
+        );
+      });
+    });
+
+    return persisted;
   }
 
-  private async syncAndReturn(slug: string): Promise<MangaDetailDto> {
-    const external = await this.gateway.getMangaBySlug(slug);
-    if (!external) throw new NotFoundError(`Manga "${slug}" not found`);
-
-    await this.mangaRepo.setSyncStatus(slug, 'syncing');
-
+  /** Alinhado à busca em lista: tenta fonte externa, upsert no catálogo; falha HTTP não bloqueia leitura local. */
+  private async ingestExternalMangaBySlug(slug: string): Promise<void> {
     try {
+      const external = await this.gateway.getMangaBySlug(slug);
+      if (!external) {
+        return;
+      }
+
       await this.mangaRepo.upsertBySlug({
         slug: external.slug,
         title: external.title,
@@ -60,28 +77,11 @@ export class GetMangaBySlugUseCase {
           : null,
         externalId: external.id,
       });
-
-      await this.mangaRepo.setSyncStatus(slug, 'idle');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await this.mangaRepo.setSyncStatus(slug, 'error', message);
+      this.logger.warn(
+        `Nexustoons getMangaBySlug ingest failed (slug=${slug}): ${message}`,
+      );
     }
-
-    const persisted = await this.mangaRepo.findBySlug(slug);
-    if (!persisted) throw new NotFoundError(`Manga "${slug}" not found`);
-    return persisted;
-  }
-
-  private async triggerBackgroundSyncIfStale(slug: string): Promise<void> {
-    const sync = await this.mangaRepo.getSyncStatus(slug);
-    if (!sync || sync.syncStatus !== 'idle') return;
-
-    const stale =
-      !sync.lastSyncedAt ||
-      Date.now() - sync.lastSyncedAt.getTime() > SYNC_STALE_MS;
-
-    if (!stale) return;
-
-    await this.syncAndReturn(slug).catch(() => {});
   }
 }

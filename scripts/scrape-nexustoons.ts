@@ -177,6 +177,7 @@ function toMangaType(raw: string): MangaType {
     manga: 'manga',
     manhwa: 'manhwa',
     manhua: 'manhua',
+    doujinshi: 'manga',
   };
   return map[raw.toLowerCase()] ?? 'manhwa';
 }

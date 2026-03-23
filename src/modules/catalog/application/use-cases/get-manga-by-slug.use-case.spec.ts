@@ -5,6 +5,7 @@ import type {
 } from '../ports/manga.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
+import type { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
 
 const DETAIL_STUB: MangaDetailDto = {
   id: 'm1',
@@ -27,6 +28,13 @@ const DETAIL_STUB: MangaDetailDto = {
   officialLink: null,
   chaptersCount: 5,
   latestChapters: [],
+};
+
+const EXTERNAL_MANGA = {
+  id: 'ext-1',
+  slug: 'solo-leveling',
+  title: 'Solo Leveling',
+  coverImage: 'https://img.test/cover.jpg',
 };
 
 function makeRepo(
@@ -64,41 +72,95 @@ function makeGateway(
   };
 }
 
+function makeSync(): Pick<SyncMangaFromSourceUseCase, 'execute'> {
+  return {
+    execute: jest.fn().mockResolvedValue(null),
+  };
+}
+
+async function flushSetImmediate(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setImmediate(() => {
+      resolve();
+    });
+  });
+}
+
 describe('GetMangaBySlugUseCase', () => {
-  describe('Given manga exists in DB', () => {
-    it('should return from DB without calling gateway', async () => {
+  describe('Given external returns manga', () => {
+    it('should upsert then return from DB (even when manga already existed)', async () => {
       const repo = makeRepo({
         findBySlug: jest.fn().mockResolvedValue(DETAIL_STUB),
       });
-      const gateway = makeGateway();
-      const sut = new GetMangaBySlugUseCase(repo, gateway);
+      const gateway = makeGateway({
+        getMangaBySlug: jest.fn().mockResolvedValue(EXTERNAL_MANGA),
+      });
+      const sync = makeSync();
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        sync as unknown as SyncMangaFromSourceUseCase,
+      );
 
       const result = await sut.execute('solo-leveling');
 
+      await flushSetImmediate();
+      expect(sync.execute).toHaveBeenCalledWith('solo-leveling');
+
+      expect(gateway.getMangaBySlug).toHaveBeenCalledWith('solo-leveling');
+      expect(repo.upsertBySlug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'solo-leveling',
+          title: 'Solo Leveling',
+          externalId: 'ext-1',
+        }),
+      );
       expect(result.slug).toBe('solo-leveling');
-      expect(gateway.getMangaBySlug).not.toHaveBeenCalled();
+    });
+
+    it('should trim slug for gateway and findBySlug', async () => {
+      const repo = makeRepo({
+        findBySlug: jest.fn().mockResolvedValue(DETAIL_STUB),
+      });
+      const gateway = makeGateway({
+        getMangaBySlug: jest.fn().mockResolvedValue(EXTERNAL_MANGA),
+      });
+      const sync = makeSync();
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        sync as unknown as SyncMangaFromSourceUseCase,
+      );
+
+      await sut.execute('  solo-leveling  ');
+
+      await flushSetImmediate();
+      expect(sync.execute).toHaveBeenCalledWith('solo-leveling');
+
+      expect(gateway.getMangaBySlug).toHaveBeenCalledWith('solo-leveling');
+      expect(repo.findBySlug).toHaveBeenCalledWith('solo-leveling');
     });
   });
 
   describe('Given manga does NOT exist in DB but exists in external source', () => {
     it('should fetch from gateway, persist, and return', async () => {
-      const findBySlug = jest
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(DETAIL_STUB);
+      const findBySlug = jest.fn().mockResolvedValue(DETAIL_STUB);
 
       const repo = makeRepo({ findBySlug });
       const gateway = makeGateway({
-        getMangaBySlug: jest.fn().mockResolvedValue({
-          id: 'ext-1',
-          slug: 'solo-leveling',
-          title: 'Solo Leveling',
-          coverImage: 'https://img.test/cover.jpg',
-        }),
+        getMangaBySlug: jest.fn().mockResolvedValue(EXTERNAL_MANGA),
       });
 
-      const sut = new GetMangaBySlugUseCase(repo, gateway);
+      const sync = makeSync();
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        sync as unknown as SyncMangaFromSourceUseCase,
+      );
       const result = await sut.execute('solo-leveling');
+
+      await flushSetImmediate();
+      expect(sync.execute).toHaveBeenCalledWith('solo-leveling');
 
       expect(gateway.getMangaBySlug).toHaveBeenCalledWith('solo-leveling');
       expect(repo.upsertBySlug).toHaveBeenCalled();
@@ -110,28 +172,60 @@ describe('GetMangaBySlugUseCase', () => {
     it('should throw NotFoundError', async () => {
       const repo = makeRepo();
       const gateway = makeGateway();
+      const sync = makeSync();
 
-      const sut = new GetMangaBySlugUseCase(repo, gateway);
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        sync as unknown as SyncMangaFromSourceUseCase,
+      );
 
       await expect(sut.execute('non-existent')).rejects.toThrow(NotFoundError);
+      expect(sync.execute).not.toHaveBeenCalled();
     });
   });
 
-  describe('Given manga exists in DB and sync is stale (>24h)', () => {
-    it('should return from DB immediately (background sync is fire-and-forget)', async () => {
+  describe('Given gateway fails but manga exists in DB', () => {
+    it('should return from DB without throwing', async () => {
       const repo = makeRepo({
         findBySlug: jest.fn().mockResolvedValue(DETAIL_STUB),
-        getSyncStatus: jest.fn().mockResolvedValue({
-          syncStatus: 'idle',
-          lastSyncedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
-        }),
       });
-      const gateway = makeGateway();
+      const gateway = makeGateway({
+        getMangaBySlug: jest
+          .fn()
+          .mockRejectedValue(new Error('network down')),
+      });
+      const sync = makeSync();
 
-      const sut = new GetMangaBySlugUseCase(repo, gateway);
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        sync as unknown as SyncMangaFromSourceUseCase,
+      );
       const result = await sut.execute('solo-leveling');
 
+      await flushSetImmediate();
+      expect(sync.execute).toHaveBeenCalledWith('solo-leveling');
+
       expect(result.slug).toBe('solo-leveling');
+      expect(repo.upsertBySlug).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Given empty slug', () => {
+    it('should throw NotFoundError', async () => {
+      const repo = makeRepo();
+      const gateway = makeGateway();
+      const sync = makeSync();
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        sync as unknown as SyncMangaFromSourceUseCase,
+      );
+
+      await expect(sut.execute('   ')).rejects.toThrow(NotFoundError);
+      expect(gateway.getMangaBySlug).not.toHaveBeenCalled();
+      expect(sync.execute).not.toHaveBeenCalled();
     });
   });
 });

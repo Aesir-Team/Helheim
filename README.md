@@ -27,7 +27,7 @@ API NestJS (catálogo de mangás/manhwas, acesso por plano, listas, progresso). 
 
 ### Rotas do MVP
 
-Tabela resumida e decisão sobre capítulos **coin**: **`docs/API-ROTAS-MVP.md`**.
+Rotas (tabela) e decisão **coin**: **`docs/API-ROTAS-MVP.md`**. Contratos detalhados: **`docs/API-MVP-DETALHADA.md`**.
 
 ### Rodar o MVP localmente
 

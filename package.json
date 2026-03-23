@@ -19,6 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:seed": "prisma db seed",
+    "smoke:sync": "tsx scripts/smoke-sync-catalog.ts",
     "scrape": "tsx scripts/scrape-nexustoons.ts",
     "scrape:quick": "SCRAPE_LIMIT=10 SCRAPE_MAX_CHAPTERS=3 tsx scripts/scrape-nexustoons.ts",
     "setup:dev-db": "bash scripts/setup-dev-db.sh"
@@ -36,6 +37,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "ioredis": "^5.10.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
@@ -65,8 +67,8 @@
     "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
-    "tsx": "^4.19.3",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },

@@ -28,7 +28,11 @@ export class CatalogController {
   ) {}
 
   @Get('mangas')
-  @ApiOperation({ summary: 'Listar mangás com paginação e filtros' })
+  @ApiOperation({
+    summary: 'Listar mangás com paginação e filtros',
+    description:
+      'Com `search` preenchido, consulta a Nexustoons, faz upsert dos resultados no catálogo e devolve a página a partir do banco (falha na fonte externa não bloqueia a listagem local).',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({
@@ -79,7 +83,9 @@ export class CatalogController {
 
   @Get('mangas/:slug')
   @ApiOperation({
-    summary: 'Detalhe de um mangá por slug (sync se não existir no BD)',
+    summary: 'Detalhe de um mangá por slug',
+    description:
+      'Consulta a Nexustoons, upsert do mangá no catálogo, resposta a partir do banco; em seguida agenda sync de capítulos/páginas em background (com cooldown de 24h após sync completo). Falha na fonte não bloqueia detalhe local.',
   })
   @ApiResponse({ status: 200, type: MangaDetailResponseDto })
   @ApiResponse({ status: 404, type: ErrorResponseDto })

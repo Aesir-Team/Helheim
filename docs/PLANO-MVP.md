@@ -101,7 +101,7 @@ npm run db:seed             # plano gratuito
 |---|---------|----------|--------|
 | B.1 | ~~Repositórios Prisma~~ | Ports (`MangaRepositoryPort`, `ChapterRepositoryPort`, `CategoryRepositoryPort`) + adapters Prisma. | **Feito** |
 | B.2 | ~~`ListMangasUseCase`~~ | Paginação, filtros (tipo, status, categoria, search, sortBy, nsfw); cap 100/page. 3 testes. | **Feito** |
-| B.3 | ~~`GetMangaBySlugUseCase`~~ | Detalhe + preview capítulos; sync automático se não existe no BD; background re-sync se stale >24h. 4 testes. | **Feito** |
+| B.3 | ~~`GetMangaBySlugUseCase`~~ | Detalhe + preview capítulos; em toda requisição consulta Nexustoons por slug, upsert no BD e lê o Prisma; falha na fonte não bloqueia se já existir local. | **Feito** |
 | B.4 | ~~`ListChaptersUseCase`~~ | Ordenação asc/desc; só published; excluir soft-deleted; cap 200/page. 3 testes. | **Feito** |
 | B.5 | ~~Gateway externo (port)~~ | `ExternalMangaGatewayPort` + `NexustoonsMangaGateway` + testes unitários. | **Feito** |
 | B.6 | ~~`SyncMangaFromSourceUseCase`~~ | Persiste metadados + capítulos + páginas; respeita `syncStatus` (skip se syncing); error handling com status. 4 testes. | **Feito** |
@@ -219,7 +219,8 @@ B (catálogo) ───────┼──► C (chapter read) ──► D (ac
 ## 8. Referências
 
 - `docs/PRODUTO-REGRAS-DE-NEGOCIO.md` — regras de negócio (fonte de verdade PO).
-- `docs/API-ROTAS-MVP.md` — rotas do MVP e decisão capítulos `coin`.
+- `docs/API-ROTAS-MVP.md` — rotas do MVP (tabela) e decisão capítulos `coin`.
+- `docs/API-MVP-DETALHADA.md` — contratos HTTP detalhados (MVP).
 - `docs/NEXUSTOONS-GATEWAY.md` — documentação do adapter externo.
 - `prisma/schema.prisma` — modelo de dados.
 - `.cursor/rules/midgard-core-api.mdc` — regras operacionais do projeto.

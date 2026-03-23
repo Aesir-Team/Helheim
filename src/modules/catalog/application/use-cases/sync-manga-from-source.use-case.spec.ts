@@ -1,7 +1,9 @@
+import { ConfigService } from '@nestjs/config';
 import { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
 import type { MangaRepositoryPort } from '../ports/manga.repository.port';
 import type { ChapterRepositoryPort } from '../ports/chapter.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
+import type { MangaSyncProgressPort } from '../ports/manga-sync-progress.port';
 
 function makeRepo(
   overrides?: Partial<MangaRepositoryPort>,
@@ -30,6 +32,7 @@ function makeChapterRepo(
   overrides?: Partial<ChapterRepositoryPort>,
 ): ChapterRepositoryPort {
   return {
+    findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
     listByMangaSlug: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     findById: jest.fn().mockResolvedValue(null),
     findNeighborChapterIds: jest
@@ -52,6 +55,40 @@ function makeGateway(
   };
 }
 
+function makeProgress(): MangaSyncProgressPort {
+  return { publish: jest.fn().mockResolvedValue(undefined) };
+}
+
+function makeConfig(
+  overrides: Record<string, string | number> = {},
+): ConfigService {
+  const defaults: Record<string, string | number> = {
+    MANGA_SYNC_DEADLINE_MS: 3 * 60 * 60 * 1000,
+    MANGA_SYNC_CHAPTER_DELAY_MS: 0,
+    MANGA_SYNC_REDIS_TTL_SEC: 3600,
+  };
+  const map = { ...defaults, ...overrides };
+  return {
+    get: jest.fn(<T = unknown>(key: string): T => map[key] as T),
+  } as unknown as ConfigService;
+}
+
+function makeSut(
+  repo: MangaRepositoryPort,
+  chapterRepo: ChapterRepositoryPort,
+  gateway: ExternalMangaGatewayPort,
+  progress?: MangaSyncProgressPort,
+  config?: ConfigService,
+): SyncMangaFromSourceUseCase {
+  return new SyncMangaFromSourceUseCase(
+    repo,
+    chapterRepo,
+    gateway,
+    progress ?? makeProgress(),
+    config ?? makeConfig(),
+  );
+}
+
 describe('SyncMangaFromSourceUseCase', () => {
   it('should skip if already syncing', async () => {
     const repo = makeRepo({
@@ -59,11 +96,7 @@ describe('SyncMangaFromSourceUseCase', () => {
         .fn()
         .mockResolvedValue({ syncStatus: 'syncing', lastSyncedAt: null }),
     });
-    const sut = new SyncMangaFromSourceUseCase(
-      repo,
-      makeChapterRepo(),
-      makeGateway(),
-    );
+    const sut = makeSut(repo, makeChapterRepo(), makeGateway());
 
     const result = await sut.execute('test-slug');
 
@@ -71,14 +104,27 @@ describe('SyncMangaFromSourceUseCase', () => {
     expect(repo.setSyncStatus).not.toHaveBeenCalled();
   });
 
+  it('should skip if recently synced within cooldown', async () => {
+    const repo = makeRepo({
+      getSyncStatus: jest.fn().mockResolvedValue({
+        syncStatus: 'idle',
+        lastSyncedAt: new Date(),
+      }),
+    });
+    const gateway = makeGateway();
+    const sut = makeSut(repo, makeChapterRepo(), gateway);
+
+    const result = await sut.execute('fresh-slug');
+
+    expect(result).toBeNull();
+    expect(repo.setSyncStatus).not.toHaveBeenCalled();
+    expect(gateway.getMangaBySlug).not.toHaveBeenCalled();
+  });
+
   it('should return null if gateway returns nothing', async () => {
     const repo = makeRepo();
     const gateway = makeGateway();
-    const sut = new SyncMangaFromSourceUseCase(
-      repo,
-      makeChapterRepo(),
-      gateway,
-    );
+    const sut = makeSut(repo, makeChapterRepo(), gateway);
 
     const result = await sut.execute('non-existent');
 
@@ -90,12 +136,14 @@ describe('SyncMangaFromSourceUseCase', () => {
   it('should upsert manga and chapters from gateway', async () => {
     const repo = makeRepo();
     const chapterRepo = makeChapterRepo();
+    const progress = makeProgress();
     const gateway = makeGateway({
       getMangaBySlug: jest.fn().mockResolvedValue({
         id: 'ext-1',
         slug: 'solo-leveling',
         title: 'Solo Leveling',
         coverImage: 'https://img/cover.jpg',
+        type: 'manhwa',
         chapters: [
           { id: 'ext-ch-1', number: '1', title: 'Ch 1' },
           { id: 'ext-ch-2', number: '2', title: 'Ch 2' },
@@ -107,7 +155,7 @@ describe('SyncMangaFromSourceUseCase', () => {
       }),
     });
 
-    const sut = new SyncMangaFromSourceUseCase(repo, chapterRepo, gateway);
+    const sut = makeSut(repo, chapterRepo, gateway, progress);
     const result = await sut.execute('solo-leveling');
 
     expect(repo.upsertBySlug).toHaveBeenCalledWith(
@@ -119,6 +167,94 @@ describe('SyncMangaFromSourceUseCase', () => {
     expect(gateway.getChapterById).toHaveBeenCalledTimes(2);
     expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 2 });
+    expect(progress.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        slug: 'solo-leveling',
+        mangaType: 'manhwa',
+        chaptersProcessed: 2,
+      }),
+    );
+  });
+
+  it('should sync only chapters not yet persisted by number', async () => {
+    const chapterRepo = makeChapterRepo({
+      findExistingNumbersByMangaId: jest.fn().mockResolvedValue(['1']),
+    });
+    const gateway = makeGateway({
+      getMangaBySlug: jest.fn().mockResolvedValue({
+        id: 'ext-1',
+        slug: 'solo-leveling',
+        title: 'Solo Leveling',
+        coverImage: 'https://img/cover.jpg',
+        type: 'manhwa',
+        chapters: [
+          { id: 'ext-ch-1', number: '1', title: 'Ch 1' },
+          { id: 'ext-ch-2', number: '2', title: 'Ch 2' },
+        ],
+      }),
+      getChapterById: jest.fn().mockResolvedValue({
+        id: 'ext-ch-2',
+        pages: [{ pageNumber: 1, imageUrl: 'https://img/2.jpg' }],
+      }),
+    });
+    const sut = makeSut(makeRepo(), chapterRepo, gateway);
+
+    const result = await sut.execute('solo-leveling');
+
+    expect(chapterRepo.findExistingNumbersByMangaId).toHaveBeenCalledWith(
+      'm1',
+      ['1', '2'],
+    );
+    expect(gateway.getChapterById).toHaveBeenCalledTimes(1);
+    expect(gateway.getChapterById).toHaveBeenCalledWith('ext-ch-2');
+    expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledTimes(1);
+    expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledWith(
+      expect.objectContaining({ number: '2' }),
+    );
+    expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 1 });
+  });
+
+  it('Given deadline 0, should timeout before getChapterById and publish timeout state', async () => {
+    const repo = makeRepo();
+    const gateway = makeGateway({
+      getMangaBySlug: jest.fn().mockResolvedValue({
+        id: 'ext-1',
+        slug: 'slow',
+        title: 'Slow',
+        coverImage: 'c',
+        chapters: [{ id: 'c1', number: '1', title: 'One' }],
+      }),
+      getChapterById: jest.fn(),
+    });
+    const progress = makeProgress();
+    const sut = makeSut(
+      repo,
+      makeChapterRepo(),
+      gateway,
+      progress,
+      makeConfig({
+        MANGA_SYNC_DEADLINE_MS: 0,
+        MANGA_SYNC_CHAPTER_DELAY_MS: 0,
+      }),
+    );
+
+    const result = await sut.execute('slow');
+
+    expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 0 });
+    expect(gateway.getChapterById).not.toHaveBeenCalled();
+    expect(progress.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'timeout',
+        slug: 'slow',
+        errorMessage: 'manga_sync_deadline_exceeded',
+      }),
+    );
+    expect(repo.setSyncStatus).toHaveBeenCalledWith(
+      'slow',
+      'error',
+      'manga_sync_deadline_exceeded',
+    );
   });
 
   it('should filter out draft chapters', async () => {
@@ -146,11 +282,7 @@ describe('SyncMangaFromSourceUseCase', () => {
       }),
     });
 
-    const sut = new SyncMangaFromSourceUseCase(
-      makeRepo(),
-      chapterRepo,
-      gateway,
-    );
+    const sut = makeSut(makeRepo(), chapterRepo, gateway);
     const result = await sut.execute('test-manga');
 
     expect(gateway.getChapterById).toHaveBeenCalledTimes(2);
@@ -187,11 +319,7 @@ describe('SyncMangaFromSourceUseCase', () => {
       }),
     });
 
-    const sut = new SyncMangaFromSourceUseCase(
-      makeRepo(),
-      chapterRepo,
-      gateway,
-    );
+    const sut = makeSut(makeRepo(), chapterRepo, gateway);
     await sut.execute('test-manga');
 
     expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledWith(
@@ -199,6 +327,37 @@ describe('SyncMangaFromSourceUseCase', () => {
         accessLevel: 'coin',
         coinCost: 5,
         releaseStatus: 'published',
+      }),
+    );
+  });
+
+  it('should use mangaType key manga for doujinshi in progress payload', async () => {
+    const progress = makeProgress();
+    const gateway = makeGateway({
+      getMangaBySlug: jest.fn().mockResolvedValue({
+        id: 'ext-1',
+        slug: 'dj',
+        title: 'DJ',
+        coverImage: 'c',
+        type: 'doujinshi',
+        chapters: [
+          { id: 'c1', number: '1', title: 'A', releaseStatus: 'published' },
+        ],
+      }),
+      getChapterById: jest.fn().mockResolvedValue({
+        id: 'c1',
+        pages: [{ pageNumber: 1, imageUrl: 'https://cdn/x.png' }],
+      }),
+    });
+
+    const sut = makeSut(makeRepo(), makeChapterRepo(), gateway, progress);
+    await sut.execute('dj');
+
+    expect(progress.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mangaType: 'manga',
+        slug: 'dj',
+        lastImageUrlPreview: ['https://cdn/x.png'],
       }),
     );
   });
@@ -230,11 +389,7 @@ describe('SyncMangaFromSourceUseCase', () => {
       }),
     });
 
-    const sut = new SyncMangaFromSourceUseCase(
-      repo,
-      makeChapterRepo(),
-      gateway,
-    );
+    const sut = makeSut(repo, makeChapterRepo(), gateway);
     await sut.execute('cat-manga');
 
     expect(repo.linkCategories).toHaveBeenCalledWith('m1', [
@@ -254,11 +409,7 @@ describe('SyncMangaFromSourceUseCase', () => {
       }),
     });
 
-    const sut = new SyncMangaFromSourceUseCase(
-      repo,
-      makeChapterRepo(),
-      gateway,
-    );
+    const sut = makeSut(repo, makeChapterRepo(), gateway);
     await sut.execute('no-cats');
 
     expect(repo.linkCategories).not.toHaveBeenCalled();
@@ -266,15 +417,12 @@ describe('SyncMangaFromSourceUseCase', () => {
 
   it('should set error status on gateway failure', async () => {
     const repo = makeRepo();
+    const progress = makeProgress();
     const gateway = makeGateway({
       getMangaBySlug: jest.fn().mockRejectedValue(new Error('Network error')),
     });
 
-    const sut = new SyncMangaFromSourceUseCase(
-      repo,
-      makeChapterRepo(),
-      gateway,
-    );
+    const sut = makeSut(repo, makeChapterRepo(), gateway, progress);
     const result = await sut.execute('fail-slug');
 
     expect(repo.setSyncStatus).toHaveBeenCalledWith(
@@ -283,5 +431,8 @@ describe('SyncMangaFromSourceUseCase', () => {
       'Network error',
     );
     expect(result).toBeNull();
+    expect(progress.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', slug: 'fail-slug' }),
+    );
   });
 });

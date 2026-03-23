@@ -38,6 +38,11 @@ export type ChapterNeighborIds = {
 };
 
 export interface ChapterRepositoryPort {
+  findExistingNumbersByMangaId(
+    mangaId: string,
+    numbers: string[],
+  ): Promise<string[]>;
+
   listByMangaSlug(
     mangaSlug: string,
     options: { order: 'asc' | 'desc'; page: number; limit: number },

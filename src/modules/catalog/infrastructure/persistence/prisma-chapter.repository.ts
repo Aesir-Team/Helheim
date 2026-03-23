@@ -12,6 +12,24 @@ import type {
 export class PrismaChapterRepository implements ChapterRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findExistingNumbersByMangaId(
+    mangaId: string,
+    numbers: string[],
+  ): Promise<string[]> {
+    if (numbers.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.chapter.findMany({
+      where: {
+        mangaId,
+        number: { in: numbers },
+        deletedAt: null,
+      },
+      select: { number: true },
+    });
+    return rows.map((row) => row.number);
+  }
+
   async listByMangaSlug(
     mangaSlug: string,
     options: { order: 'asc' | 'desc'; page: number; limit: number },

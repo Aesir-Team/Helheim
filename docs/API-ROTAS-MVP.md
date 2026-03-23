@@ -1,6 +1,15 @@
 # Rotas da API — MVP Midgard Core
 
-Prefixo global: **`/api/v1`**. Documentação interativa: **`/docs`** (Scalar), OpenAPI JSON: **`/api-json`**.
+Referência **expandida** (parâmetros, erros, auth, checklist): [`API-MVP-DETALHADA.md`](./API-MVP-DETALHADA.md).
+
+**Prefixo dos recursos REST:** **`/api/v1`**.
+
+**Fora do prefixo** (na raiz do servidor, ex.: `http://localhost:3000`):
+
+| Caminho | Uso |
+|---------|-----|
+| **`/docs`** | Scalar (documentação interativa) |
+| **`/api-json`** | OpenAPI em JSON |
 
 ## Decisão G.4 — capítulos `accessLevel = coin`
 
@@ -13,6 +22,8 @@ Prefixo global: **`/api/v1`**. Documentação interativa: **`/docs`** (Scalar), 
 
 | Método | Rota | Auth | Descrição |
 |--------|------|:----:|-----------|
+| GET | `/docs` | N | Scalar (sem `api/v1`) |
+| GET | `/api-json` | N | OpenAPI JSON (sem `api/v1`) |
 | GET | `/health` | N | Health check |
 | POST | `/auth/register` | N | Registro + JWT |
 | POST | `/auth/login` | N | Login + JWT |

@@ -11,9 +11,9 @@ Integração **HTTP** com a API pública Nexustoons — não há scrap de HTML n
 
 | Método | Caminho | Uso no Midgard |
 |--------|---------|----------------|
-| GET | `/api/mangas` | Listagem / busca (`listMangas`) |
+| GET | `/api/mangas` | Listagem; o Midgard chama com `search` quando o cliente usa `GET /api/v1/mangas?search=` (upsert no catálogo antes de paginar no Prisma) |
 | GET | `/api/mangas/trending` | Trending (`listTrending`) |
-| GET | `/api/mangas/{slug}` | Detalhe da obra (`getMangaBySlug`) |
+| GET | `/api/manga/{slug}` | Detalhe da obra (`getMangaBySlug`) — o Midgard chama em **toda** `GET /api/v1/mangas/:slug` (upsert no catálogo antes de ler o Prisma) |
 | GET | `/api/chapter/{chapterId}` | Páginas do capítulo (`getChapterById`) |
 
 ---
@@ -63,7 +63,20 @@ Se a API Nexustoons mudar nomes de campos, ajustar `nexustoons-json.mapper.ts` e
 
 ---
 
+## Sync de capítulos (background) e Redis
+
+O `SyncMangaFromSourceUseCase` percorre os capítulos **um a um** com pausa configurável (`MANGA_SYNC_CHAPTER_DELAY_MS`, padrão 300 ms). Há um **prazo máximo** (`MANGA_SYNC_DEADLINE_MS`, padrão **3 horas** = 10_800_000 ms): ao estourar, interrompe, grava `syncStatus`/`error` no Prisma e publica estado `timeout` no Redis (se habilitado).
+
+**URLs das imagens** continuam no **PostgreSQL** (`ChapterPage.imageUrl`), via `upsertByMangaAndNumber`.
+
+Se `REDIS_URL` estiver definido, o progresso é gravado como JSON na chave:
+
+`midgard:manga-sync:v1:{manga|manhwa|manhua}:{slug}`
+
+O segmento do meio é o **tipo canônico** Midgard (ex.: doujinshi da fonte → `manga`). Campos úteis no JSON: `status` (`running` | `completed` | `timeout` | `failed`), `chaptersProcessed`, `totalChapters`, `lastChapterNumber`, `lastImageUrlPreview` (até 3 URLs da última leitura), `deadlineAt`. TTL da chave: `MANGA_SYNC_REDIS_TTL_SEC` (padrão 7 dias).
+
+---
+
 ## Próximos passos (MVP)
 
-- Use case `SyncMangaFromSourceUseCase` injeta `EXTERNAL_MANGA_GATEWAY` e persiste em Prisma.
 - Mapear `ExternalSourceProvider.NEXUSTOONS` em `MangaExternalSource`.
