@@ -64,7 +64,22 @@ export class PrismaReadingProgressRepository implements ReadingProgressRepositor
       take: limit,
       include: {
         manga: {
-          select: { title: true, slug: true, coverImage: true },
+          select: {
+            title: true,
+            slug: true,
+            coverImage: true,
+            _count: {
+              select: {
+                chapters: {
+                  where: {
+                    deletedAt: null,
+                    releaseStatus: 'published',
+                    accessLevel: 'public',
+                  },
+                },
+              },
+            },
+          },
         },
         chapter: {
           select: { number: true, title: true },
@@ -78,6 +93,7 @@ export class PrismaReadingProgressRepository implements ReadingProgressRepositor
       mangaTitle: r.manga.title,
       mangaSlug: r.manga.slug,
       mangaCoverImage: r.manga.coverImage,
+      chaptersCount: r.manga._count.chapters,
       chapterId: r.chapterId,
       chapterNumber: r.chapter.number,
       chapterTitle: r.chapter.title,

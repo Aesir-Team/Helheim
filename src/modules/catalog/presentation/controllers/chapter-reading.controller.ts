@@ -35,7 +35,8 @@ export class ChapterReadingController {
     description:
       'Requer JWT. Aplica limite semanal do plano gratuito (capítulos public); ' +
       'roles VIP/ADMIN/MODERATOR e planos com leitura ilimitada ficam liberados. ' +
-      'Capítulos por coins retornam 403 no MVP até o fluxo de coins existir.',
+      'Capítulos por coins retornam 403 no MVP até o fluxo de coins existir. ' +
+      'Após acesso concedido, grava progresso de leitura (capítulo atual, página 1) como no PATCH de progresso; falha ao gravar não impede a resposta.',
   })
   @ApiResponse({ status: 200, type: ChapterForReadingResponseDto })
   @ApiResponse({ status: 401, type: ErrorResponseDto })

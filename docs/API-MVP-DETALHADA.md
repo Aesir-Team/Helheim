@@ -155,6 +155,8 @@ Após responder **200**, dispara em **background** (`SyncMangaFromSourceUseCase`
 
 Após checagem de acesso, capítulos **`public`** consomem cota semanal de forma idempotente por `(usuário, capítulo, semana ISO UTC)`.
 
+Após **consumo** bem-sucedido, o servidor grava progresso como no `PATCH` de leitura (`chapterId` atual, `pageNumber: 1`). Falha ao gravar progresso **não** altera o **200** da leitura.
+
 ---
 
 ## 8. Decisão produto — capítulos `coin` (G.4)
@@ -196,7 +198,7 @@ Todas exigem **JWT**.
 | | |
 |--|--|
 | **Query** | `limit` opcional (inteiro 1–100; default **20** no use case). Valor inválido → **400** |
-| **200** | Array de entradas “continuar lendo”, ordenado por `lastReadAt` desc. Omite mangá/capítulo indisponíveis (soft delete / não publicado) |
+| **200** | Array de entradas “continuar lendo”, ordenado por `lastReadAt` desc. Cada item inclui `chaptersCount` (total de capítulos **public** + **public** no mangá, mesma regra do detalhe) para barra de progresso com `chaptersReadCount`. Omite mangá/capítulo indisponíveis (soft delete / não publicado) |
 
 ### `PATCH /users/me/reading-progress`
 

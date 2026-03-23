@@ -53,6 +53,7 @@ function toContinueResponse(
     mangaTitle: row.mangaTitle,
     mangaSlug: row.mangaSlug,
     mangaCoverImage: row.mangaCoverImage,
+    chaptersCount: row.chaptersCount,
     chapterId: row.chapterId,
     chapterNumber: row.chapterNumber,
     chapterTitle: row.chapterTitle,

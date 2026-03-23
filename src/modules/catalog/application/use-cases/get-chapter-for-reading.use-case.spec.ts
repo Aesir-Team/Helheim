@@ -9,6 +9,7 @@ import {
 } from '../../../../shared/domain/errors';
 import type { CheckChapterAccessUseCase } from '../../../access/application/use-cases/check-chapter-access.use-case';
 import type { ConsumeWeeklyChapterAccessUseCase } from '../../../access/application/use-cases/consume-weekly-chapter-access.use-case';
+import type { SaveReadingProgressUseCase } from '../../../progress/application/use-cases/save-reading-progress.use-case';
 
 const DETAIL: ChapterDetailDto = {
   id: 'ch-2',
@@ -31,6 +32,7 @@ function makeRepo(
   overrides?: Partial<ChapterRepositoryPort>,
 ): ChapterRepositoryPort {
   return {
+    findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
     listByMangaSlug: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     findById: jest.fn().mockResolvedValue(null),
     findNeighborChapterIds: jest
@@ -51,10 +53,14 @@ describe('GetChapterForReadingUseCase', () => {
       const consumeWeeklyChapterAccess = {
         execute: jest.fn(),
       } as unknown as ConsumeWeeklyChapterAccessUseCase;
+      const saveReadingProgress = {
+        execute: jest.fn(),
+      } as unknown as SaveReadingProgressUseCase;
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
         consumeWeeklyChapterAccess,
+        saveReadingProgress,
       );
 
       await expect(
@@ -66,6 +72,7 @@ describe('GetChapterForReadingUseCase', () => {
       ).rejects.toThrow(NotFoundError);
       expect(repo.findNeighborChapterIds).not.toHaveBeenCalled();
       expect(checkChapterAccess.execute).not.toHaveBeenCalled();
+      expect(saveReadingProgress.execute).not.toHaveBeenCalled();
     });
   });
 
@@ -84,10 +91,14 @@ describe('GetChapterForReadingUseCase', () => {
       const consumeWeeklyChapterAccess = {
         execute: jest.fn(),
       } as unknown as ConsumeWeeklyChapterAccessUseCase;
+      const saveReadingProgress = {
+        execute: jest.fn(),
+      } as unknown as SaveReadingProgressUseCase;
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
         consumeWeeklyChapterAccess,
+        saveReadingProgress,
       );
 
       await expect(
@@ -104,6 +115,7 @@ describe('GetChapterForReadingUseCase', () => {
         expect(fe.message).toBe('Limite atingido');
       }
       expect(consumeWeeklyChapterAccess.execute).not.toHaveBeenCalled();
+      expect(saveReadingProgress.execute).not.toHaveBeenCalled();
     });
   });
 
@@ -122,10 +134,22 @@ describe('GetChapterForReadingUseCase', () => {
       const consumeWeeklyChapterAccess = {
         execute: jest.fn().mockResolvedValue('created'),
       } as unknown as ConsumeWeeklyChapterAccessUseCase;
+      const saveReadingProgress = {
+        execute: jest.fn().mockResolvedValue({
+          id: 'rp1',
+          userId: 'u1',
+          mangaId: 'm1',
+          chapterId: 'ch-2',
+          pageNumber: 1,
+          chaptersReadCount: 1,
+          lastReadAt: new Date(),
+        }),
+      } as unknown as SaveReadingProgressUseCase;
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
         consumeWeeklyChapterAccess,
+        saveReadingProgress,
       );
 
       const out = await sut.execute({
@@ -151,6 +175,12 @@ describe('GetChapterForReadingUseCase', () => {
         userId: 'u1',
         chapterId: 'ch-2',
         accessLevel: 'public',
+      });
+      expect(saveReadingProgress.execute).toHaveBeenCalledWith({
+        userId: 'u1',
+        mangaId: 'm1',
+        chapterId: 'ch-2',
+        pageNumber: 1,
       });
       expect(repo.findNeighborChapterIds).toHaveBeenCalledWith('ch-2');
     });

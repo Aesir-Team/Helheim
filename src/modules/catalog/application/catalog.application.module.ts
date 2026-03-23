@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { PrismaModule } from '../../../shared/infrastructure/prisma/prisma.module';
 import { AccessApplicationModule } from '../../access/application/access.application.module';
+import { ProgressApplicationModule } from '../../progress/application/progress.application.module';
 import { CatalogInfrastructureModule } from '../infrastructure/catalog.infrastructure.module';
 
 import { MANGA_REPOSITORY } from './ports/manga.repository.port';
@@ -19,7 +20,12 @@ import { SyncMangaFromSourceUseCase } from './use-cases/sync-manga-from-source.u
 import { GetChapterForReadingUseCase } from './use-cases/get-chapter-for-reading.use-case';
 
 @Module({
-  imports: [PrismaModule, CatalogInfrastructureModule, AccessApplicationModule],
+  imports: [
+    PrismaModule,
+    CatalogInfrastructureModule,
+    AccessApplicationModule,
+    forwardRef(() => ProgressApplicationModule),
+  ],
   providers: [
     { provide: MANGA_REPOSITORY, useClass: PrismaMangaRepository },
     { provide: CHAPTER_REPOSITORY, useClass: PrismaChapterRepository },

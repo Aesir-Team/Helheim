@@ -64,6 +64,7 @@ function makeChapterRepo(
   overrides?: Partial<ChapterRepositoryPort>,
 ): ChapterRepositoryPort {
   return {
+    findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
     listByMangaSlug: jest.fn(),
     findById: jest.fn().mockResolvedValue(CHAPTER),
     findNeighborChapterIds: jest.fn(),

@@ -39,6 +39,12 @@ export class ContinueReadingEntryResponseDto {
   @ApiProperty()
   mangaCoverImage!: string;
 
+  @ApiProperty({
+    description:
+      'Total de capítulos publicados e públicos no mangá (barra: chaptersReadCount / chaptersCount).',
+  })
+  chaptersCount!: number;
+
   @ApiProperty()
   chapterId!: string;
 

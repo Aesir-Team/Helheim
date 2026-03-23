@@ -18,6 +18,8 @@ export interface ContinueReadingEntryDto {
   mangaTitle: string;
   mangaSlug: string;
   mangaCoverImage: string;
+  /** Total de capítulos public+public no mangá (mesma regra do detalhe do catálogo). */
+  chaptersCount: number;
   chapterId: string;
   chapterNumber: string;
   chapterTitle: string | null;

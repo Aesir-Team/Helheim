@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { PrismaModule } from '../../../shared/infrastructure/prisma/prisma.module';
 import { AuthApplicationModule } from '../../auth/application/auth.application.module';
 import { CatalogApplicationModule } from '../../catalog/application/catalog.application.module';
@@ -9,7 +9,11 @@ import { GetContinueReadingUseCase } from './use-cases/get-continue-reading.use-
 import { ReadingProgressController } from '../presentation/controllers/reading-progress.controller';
 
 @Module({
-  imports: [PrismaModule, AuthApplicationModule, CatalogApplicationModule],
+  imports: [
+    PrismaModule,
+    AuthApplicationModule,
+    forwardRef(() => CatalogApplicationModule),
+  ],
   controllers: [ReadingProgressController],
   providers: [
     {
@@ -19,5 +23,6 @@ import { ReadingProgressController } from '../presentation/controllers/reading-p
     SaveReadingProgressUseCase,
     GetContinueReadingUseCase,
   ],
+  exports: [SaveReadingProgressUseCase],
 })
 export class ProgressApplicationModule {}

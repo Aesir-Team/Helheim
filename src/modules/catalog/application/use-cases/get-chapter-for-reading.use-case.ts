@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import {
   CHAPTER_REPOSITORY,
   type ChapterRepositoryPort,
@@ -11,6 +11,7 @@ import {
 } from '../../../../shared/domain/errors';
 import { CheckChapterAccessUseCase } from '../../../access/application/use-cases/check-chapter-access.use-case';
 import { ConsumeWeeklyChapterAccessUseCase } from '../../../access/application/use-cases/consume-weekly-chapter-access.use-case';
+import { SaveReadingProgressUseCase } from '../../../progress/application/use-cases/save-reading-progress.use-case';
 
 /**
  * Fase D (PLANO-MVP): após autenticação, CheckChapterAccess + ConsumeWeeklyChapterAccess (cap. public).
@@ -30,11 +31,15 @@ export interface GetChapterForReadingInput {
 
 @Injectable()
 export class GetChapterForReadingUseCase {
+  private readonly logger = new Logger(GetChapterForReadingUseCase.name);
+
   constructor(
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: ChapterRepositoryPort,
     private readonly checkChapterAccess: CheckChapterAccessUseCase,
     private readonly consumeWeeklyChapterAccess: ConsumeWeeklyChapterAccessUseCase,
+    @Inject(forwardRef(() => SaveReadingProgressUseCase))
+    private readonly saveReadingProgress: SaveReadingProgressUseCase,
   ) {}
 
   async execute(
@@ -63,6 +68,20 @@ export class GetChapterForReadingUseCase {
       chapterId: detail.id,
       accessLevel,
     });
+
+    try {
+      await this.saveReadingProgress.execute({
+        userId: input.userId,
+        mangaId: detail.mangaId,
+        chapterId: detail.id,
+        pageNumber: 1,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Reading progress on chapter open failed (chapterId=${detail.id}): ${message}`,
+      );
+    }
 
     const { prevChapterId, nextChapterId } =
       await this.chapterRepo.findNeighborChapterIds(input.chapterId);
