@@ -86,7 +86,7 @@ Efeito colateral: cria **`Subscription`** no plano `gratuito` quando o plano exi
 | | |
 |--|--|
 | **Auth** | JWT |
-| **200** | Perfil do usuário autenticado |
+| **200** | Perfil do usuário autenticado + **`reading`**: `{ mangasWithProgressCount, chaptersReadTotal }` — agregados leves (1 transação no BD: quantos mangás têm `reading_progress` + soma de `chaptersReadCount` em todos eles; não lista obras). Login/registro **não** incluem `reading` no `user` |
 
 ### `PATCH /api/v1/auth/me`
 

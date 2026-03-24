@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { RegisterUserUseCase } from './use-cases/register-user.use-case';
 import { LoginUseCase } from './use-cases/login.use-case';
 import { GetProfileUseCase } from './use-cases/get-profile.use-case';
@@ -13,6 +13,7 @@ import { PrismaModule } from '../../../shared/infrastructure/prisma/prisma.modul
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AccessApplicationModule } from '../../access/application/access.application.module';
+import { ProgressApplicationModule } from '../../progress/application/progress.application.module';
 import { JwtAuthGuard } from '../presentation/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../presentation/guards/optional-jwt-auth.guard';
 
@@ -20,6 +21,7 @@ import { OptionalJwtAuthGuard } from '../presentation/guards/optional-jwt-auth.g
   imports: [
     PrismaModule,
     AccessApplicationModule,
+    forwardRef(() => ProgressApplicationModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({

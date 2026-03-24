@@ -6,10 +6,13 @@ import {
 } from '../ports/user.repository.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
 import { AuthUserWithPassword } from '../../domain/entities/user.entity';
+import { READING_PROGRESS_REPOSITORY } from '../../../progress/application/ports/reading-progress.repository.port';
+import type { ReadingProgressRepositoryPort } from '../../../progress/application/ports/reading-progress.repository.port';
 
 describe('GetProfileUseCase', () => {
   let useCase: GetProfileUseCase;
   let userRepo: jest.Mocked<UserRepositoryPort>;
+  let progressRepo: jest.Mocked<ReadingProgressRepositoryPort>;
 
   const mockUser: AuthUserWithPassword = {
     id: 'user-1',
@@ -32,11 +35,21 @@ describe('GetProfileUseCase', () => {
       create: jest.fn(),
       updateProfile: jest.fn(),
     };
+    progressRepo = {
+      findByUserAndManga: jest.fn(),
+      aggregateForUser: jest.fn().mockResolvedValue({
+        mangasWithProgressCount: 3,
+        chaptersReadTotal: 27,
+      }),
+      upsert: jest.fn(),
+      listContinueReading: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GetProfileUseCase,
         { provide: USER_REPOSITORY, useValue: userRepo },
+        { provide: READING_PROGRESS_REPOSITORY, useValue: progressRepo },
       ],
     }).compile();
 
@@ -46,8 +59,13 @@ describe('GetProfileUseCase', () => {
   it('deve retornar perfil sem password', async () => {
     const result = await useCase.execute('user-1');
     expect(userRepo.findById).toHaveBeenCalledWith('user-1');
+    expect(progressRepo.aggregateForUser).toHaveBeenCalledWith('user-1');
     expect(result.id).toBe('user-1');
     expect(result.email).toBe('test@example.com');
+    expect(result.reading).toEqual({
+      mangasWithProgressCount: 3,
+      chaptersReadTotal: 27,
+    });
     expect((result as { password?: string }).password).toBeUndefined();
   });
 

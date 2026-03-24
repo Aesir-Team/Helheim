@@ -41,6 +41,10 @@ function makeProgressRepo(
       lastReadAt: new Date('2026-01-01'),
     }),
     listContinueReading: jest.fn().mockResolvedValue([]),
+    aggregateForUser: jest.fn().mockResolvedValue({
+      mangasWithProgressCount: 0,
+      chaptersReadTotal: 0,
+    }),
     ...overrides,
   };
 }

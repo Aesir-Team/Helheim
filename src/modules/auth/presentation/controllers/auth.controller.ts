@@ -122,7 +122,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Perfil do usuário',
-    description: 'Retorna o perfil do usuário autenticado (requer JWT).',
+    description:
+      'Retorna o perfil do usuário autenticado (requer JWT) + objeto `reading` com métricas leves: mangás com progresso e soma de capítulos lidos (agregados no BD, sem listas).',
   })
   @ApiResponse({
     status: 200,

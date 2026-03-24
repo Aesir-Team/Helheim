@@ -4,6 +4,7 @@ import type {
   ReadingProgressRepositoryPort,
   ReadingProgressRowDto,
   ContinueReadingEntryDto,
+  ReadingProgressUserAggregatesDto,
 } from '../../application/ports/reading-progress.repository.port';
 
 @Injectable()
@@ -48,6 +49,22 @@ export class PrismaReadingProgressRepository implements ReadingProgressRepositor
       },
     });
     return this.toRow(row);
+  }
+
+  async aggregateForUser(
+    userId: string,
+  ): Promise<ReadingProgressUserAggregatesDto> {
+    const [mangasWithProgressCount, sumRow] = await this.prisma.$transaction([
+      this.prisma.readingProgress.count({ where: { userId } }),
+      this.prisma.readingProgress.aggregate({
+        where: { userId },
+        _sum: { chaptersReadCount: true },
+      }),
+    ]);
+    return {
+      mangasWithProgressCount,
+      chaptersReadTotal: sumRow._sum.chaptersReadCount ?? 0,
+    };
   }
 
   async listContinueReading(

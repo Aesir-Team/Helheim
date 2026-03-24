@@ -28,11 +28,20 @@ export interface ContinueReadingEntryDto {
   lastReadAt: Date;
 }
 
+/** Agregados leves para perfil (uma transação count + sum). */
+export interface ReadingProgressUserAggregatesDto {
+  mangasWithProgressCount: number;
+  chaptersReadTotal: number;
+}
+
 export interface ReadingProgressRepositoryPort {
   findByUserAndManga(
     userId: string,
     mangaId: string,
   ): Promise<ReadingProgressRowDto | null>;
+
+  /** Contagem de mangás com progresso + soma de `chaptersReadCount` (métricas do PATCH progresso). */
+  aggregateForUser(userId: string): Promise<ReadingProgressUserAggregatesDto>;
 
   upsert(
     userId: string,

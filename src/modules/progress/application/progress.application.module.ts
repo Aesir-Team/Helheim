@@ -11,7 +11,7 @@ import { ReadingProgressController } from '../presentation/controllers/reading-p
 @Module({
   imports: [
     PrismaModule,
-    AuthApplicationModule,
+    forwardRef(() => AuthApplicationModule),
     forwardRef(() => CatalogApplicationModule),
   ],
   controllers: [ReadingProgressController],
@@ -23,6 +23,6 @@ import { ReadingProgressController } from '../presentation/controllers/reading-p
     SaveReadingProgressUseCase,
     GetContinueReadingUseCase,
   ],
-  exports: [SaveReadingProgressUseCase],
+  exports: [SaveReadingProgressUseCase, READING_PROGRESS_REPOSITORY],
 })
 export class ProgressApplicationModule {}
