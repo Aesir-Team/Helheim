@@ -121,7 +121,6 @@ export class ReadingProgressController {
       mangaId: dto.mangaId,
       chapterId: dto.chapterId,
       pageNumber: dto.pageNumber,
-      chaptersReadCount: dto.chaptersReadCount,
     });
     return toSavedResponse(row);
   }

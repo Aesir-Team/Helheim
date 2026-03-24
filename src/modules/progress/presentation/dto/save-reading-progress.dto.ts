@@ -18,8 +18,9 @@ export class SaveReadingProgressDto {
 
   @ApiPropertyOptional({
     minimum: 0,
+    deprecated: true,
     description:
-      'Total de capítulos lidos neste mangá. Se omitido, mantém ao mesmo capítulo ou incrementa ao mudar de capítulo.',
+      'Ignorado pelo servidor. O total de lidos é calculado a partir do `chapterId` (marcador): conta capítulos publicados com `number` ≤ ao desse capítulo, igual à regra de `isRead` na listagem.',
   })
   @IsOptional()
   @IsInt()

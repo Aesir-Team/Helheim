@@ -66,8 +66,27 @@ export class MangaDetailResponseDto {
   })
   categories!: { id: string; name: string; slug: string }[];
 
-  @ApiProperty({ example: 180 })
+  @ApiProperty({
+    example: 180,
+    description:
+      'Denominador para UI (barra de lidos): max(capítulos publicados no BD, total reportado pela fonte no último GET/sync).',
+  })
   chaptersCount!: number;
+
+  @ApiProperty({
+    example: 120,
+    description:
+      'Quantos capítulos publicados já estão persistidos no BD (durante sync pode ser menor que `chaptersCount`).',
+  })
+  chaptersSyncedCount!: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 42,
+    description:
+      'Com JWT: quantos capítulos publicados têm `number` ≤ ao marcador (`reading_progress.chapterId`), alinhado a `isRead` na listagem (não é contagem de visitas). **0** sem progresso. Sem JWT: **null**.',
+  })
+  chaptersReadCount!: number | null;
 
   @ApiProperty({
     type: [ChapterSummaryResponseDto],

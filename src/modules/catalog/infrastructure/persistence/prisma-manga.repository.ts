@@ -20,6 +20,7 @@ import {
   normalizeMangaStatusFromExternal,
   normalizeMangaTypeFromExternal,
 } from '../../../../shared/domain/manga-external.normalization';
+import { resolveMangaChaptersDisplayCount } from '../../../../shared/domain/manga-chapter-display-count.policy';
 
 @Injectable()
 export class PrismaMangaRepository implements MangaRepositoryPort {
@@ -85,7 +86,12 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
         name: mc.category.name,
         slug: mc.category.slug,
       })),
-      chaptersCount: row._count.chapters,
+      chaptersSyncedCount: row._count.chapters,
+      chaptersCount: resolveMangaChaptersDisplayCount(
+        row._count.chapters,
+        row.reportedChapterCount,
+      ),
+      chaptersReadCount: null,
       latestChapters: row.chapters.map((ch) => ({
         id: ch.id,
         mangaId: ch.mangaId,
@@ -273,6 +279,30 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
     });
 
     return { id: row.id };
+  }
+
+  async mergeReportedChapterCount(
+    slug: string,
+    candidateCount: number,
+  ): Promise<void> {
+    if (!Number.isFinite(candidateCount) || candidateCount < 0) {
+      return;
+    }
+    const row = await this.prisma.manga.findFirst({
+      where: { slug, deletedAt: null },
+      select: { reportedChapterCount: true },
+    });
+    if (!row) {
+      return;
+    }
+    const next = Math.max(row.reportedChapterCount ?? 0, candidateCount);
+    if (next === (row.reportedChapterCount ?? 0)) {
+      return;
+    }
+    await this.prisma.manga.updateMany({
+      where: { slug, deletedAt: null },
+      data: { reportedChapterCount: next },
+    });
   }
 
   async linkCategories(

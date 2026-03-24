@@ -16,7 +16,10 @@ export class ReadingProgressSavedResponseDto {
   @ApiProperty()
   pageNumber!: number;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Capítulos com `number` ≤ ao marcador (`chapterId`), calculado no servidor (alinhado a `isRead` na listagem).',
+  })
   chaptersReadCount!: number;
 
   @ApiProperty({ type: String, format: 'date-time' })
@@ -41,7 +44,7 @@ export class ContinueReadingEntryResponseDto {
 
   @ApiProperty({
     description:
-      'Total de capítulos publicados no mangá (barra: chaptersReadCount / chaptersCount).',
+      'Denominador da barra (chaptersReadCount / chaptersCount): max(BD, reportado), como no detalhe do mangá.',
   })
   chaptersCount!: number;
 
@@ -57,7 +60,10 @@ export class ContinueReadingEntryResponseDto {
   @ApiProperty()
   pageNumber!: number;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Numerador da barra: mesma regra do `GET /mangas/:slug` — contagem por ordem natural até ao capítulo marcador.',
+  })
   chaptersReadCount!: number;
 
   @ApiProperty({ type: String, format: 'date-time' })

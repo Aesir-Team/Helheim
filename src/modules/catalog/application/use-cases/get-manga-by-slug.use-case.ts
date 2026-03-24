@@ -15,6 +15,14 @@ import {
   type ChapterListViewerContext,
 } from '../services/chapter-summaries-viewer-lock.applier';
 import { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
+import {
+  READING_PROGRESS_REPOSITORY,
+  type ReadingProgressRepositoryPort,
+} from '../../../progress/application/ports/reading-progress.repository.port';
+import {
+  CHAPTER_REPOSITORY,
+  type ChapterRepositoryPort,
+} from '../ports/chapter.repository.port';
 
 @Injectable()
 export class GetMangaBySlugUseCase {
@@ -28,6 +36,10 @@ export class GetMangaBySlugUseCase {
     private readonly syncMangaFromSource: SyncMangaFromSourceUseCase,
     private readonly viewerLockApplier: ChapterSummariesViewerLockApplier,
     private readonly summaryEnricher: ChapterSummariesCatalogEnricher,
+    @Inject(READING_PROGRESS_REPOSITORY)
+    private readonly readingProgressRepo: ReadingProgressRepositoryPort,
+    @Inject(CHAPTER_REPOSITORY)
+    private readonly chapterRepo: ChapterRepositoryPort,
   ) {}
 
   async execute(
@@ -65,7 +77,27 @@ export class GetMangaBySlugUseCase {
       locked,
     );
 
-    return { ...persisted, latestChapters };
+    let chaptersReadCount: number | null = null;
+    if (v != null) {
+      const progress = await this.readingProgressRepo.findByUserAndManga(
+        v.userId,
+        persisted.id,
+      );
+      if (progress == null) {
+        chaptersReadCount = 0;
+      } else {
+        const [derived] =
+          await this.chapterRepo.resolveChaptersReadCountsForBookmarks([
+            {
+              mangaId: persisted.id,
+              bookmarkChapterId: progress.chapterId,
+            },
+          ]);
+        chaptersReadCount = derived;
+      }
+    }
+
+    return { ...persisted, latestChapters, chaptersReadCount };
   }
 
   /** Alinhado à busca em lista: tenta fonte externa, upsert no catálogo; falha HTTP não bloqueia leitura local. */
@@ -97,6 +129,16 @@ export class GetMangaBySlugUseCase {
           : null,
         externalId: external.id,
       });
+
+      const publishedFromSource = (external.chapters ?? []).filter(
+        (ch) => !ch.releaseStatus || ch.releaseStatus === 'published',
+      ).length;
+      if (publishedFromSource > 0) {
+        await this.mangaRepo.mergeReportedChapterCount(
+          slug,
+          publishedFromSource,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(

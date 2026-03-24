@@ -113,6 +113,8 @@ model Manga {
   artist          String?
   officialLink    String?
   lastChapterAt   DateTime?
+  /// Último total de capítulos visto na resposta da API externa (lista no GET manga). null = desconhecido. `chaptersCount` na API = max(publicados no BD, este valor).
+  reportedChapterCount Int?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?

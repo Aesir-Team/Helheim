@@ -8,6 +8,42 @@ import { NotFoundError } from '../../../../shared/domain/errors';
 import type { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
 import type { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
 import type { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
+import type { ReadingProgressRepositoryPort } from '../../../progress/application/ports/reading-progress.repository.port';
+import type { ChapterRepositoryPort } from '../ports/chapter.repository.port';
+
+function makeChapterRepoForDetail(
+  overrides?: Partial<ChapterRepositoryPort>,
+): ChapterRepositoryPort {
+  return {
+    findExistingNumbersByMangaId: jest.fn(),
+    countPublishedByMangaId: jest.fn(),
+    countPublishedWithNumberAtMost: jest.fn(),
+    resolveChaptersReadCountsForBookmarks: jest
+      .fn()
+      .mockImplementation((items: readonly unknown[]) =>
+        Promise.resolve(items.map(() => 0)),
+      ),
+    listByMangaSlug: jest.fn(),
+    listPublishedSummariesFromMangaSlugFromNumberAsc: jest.fn(),
+    findById: jest.fn(),
+    findNeighborChapterIds: jest.fn(),
+    upsertByMangaAndNumber: jest.fn(),
+    applyFreeTierAccessForManga: jest.fn(),
+    ...overrides,
+  };
+}
+
+function makeReadingProgressRepo(
+  overrides?: Partial<ReadingProgressRepositoryPort>,
+): ReadingProgressRepositoryPort {
+  return {
+    findByUserAndManga: jest.fn().mockResolvedValue(null),
+    aggregateForUser: jest.fn(),
+    upsert: jest.fn(),
+    listContinueReading: jest.fn(),
+    ...overrides,
+  };
+}
 
 function makeLockApplier(): ChapterSummariesViewerLockApplier {
   return {
@@ -41,6 +77,8 @@ const DETAIL_STUB: MangaDetailDto = {
   artist: null,
   officialLink: null,
   chaptersCount: 5,
+  chaptersSyncedCount: 5,
+  chaptersReadCount: null,
   latestChapters: [],
 };
 
@@ -66,6 +104,7 @@ function makeRepo(
     }),
     listBySlugs: jest.fn().mockResolvedValue([]),
     upsertBySlug: jest.fn().mockResolvedValue({ id: 'm1' }),
+    mergeReportedChapterCount: jest.fn().mockResolvedValue(undefined),
     linkCategories: jest.fn().mockResolvedValue(undefined),
     getSyncStatus: jest
       .fn()
@@ -117,6 +156,8 @@ describe('GetMangaBySlugUseCase', () => {
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
+        makeReadingProgressRepo(),
+        makeChapterRepoForDetail(),
       );
 
       const result = await sut.execute('solo-leveling');
@@ -133,6 +174,41 @@ describe('GetMangaBySlugUseCase', () => {
         }),
       );
       expect(result.slug).toBe('solo-leveling');
+      expect(result.chaptersReadCount).toBeNull();
+    });
+
+    it('should merge reported chapter count when external lists published chapters', async () => {
+      const repo = makeRepo({
+        findBySlug: jest.fn().mockResolvedValue(DETAIL_STUB),
+      });
+      const gateway = makeGateway({
+        getMangaBySlug: jest.fn().mockResolvedValue({
+          ...EXTERNAL_MANGA,
+          chapters: [
+            { id: 'a', number: '1', title: 'A', releaseStatus: 'published' },
+            { id: 'b', number: '2', title: 'B', releaseStatus: 'draft' },
+            { id: 'c', number: '3', title: 'C' },
+          ],
+        }),
+      });
+      const sync = makeSync();
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        sync as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
+        makeReadingProgressRepo(),
+        makeChapterRepoForDetail(),
+      );
+
+      await sut.execute('solo-leveling');
+      await flushSetImmediate();
+
+      expect(repo.mergeReportedChapterCount).toHaveBeenCalledWith(
+        'solo-leveling',
+        2,
+      );
     });
 
     it('should trim slug for gateway and findBySlug', async () => {
@@ -149,6 +225,8 @@ describe('GetMangaBySlugUseCase', () => {
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
+        makeReadingProgressRepo(),
+        makeChapterRepoForDetail(),
       );
 
       await sut.execute('  solo-leveling  ');
@@ -177,6 +255,8 @@ describe('GetMangaBySlugUseCase', () => {
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
+        makeReadingProgressRepo(),
+        makeChapterRepoForDetail(),
       );
       const result = await sut.execute('solo-leveling');
 
@@ -186,6 +266,82 @@ describe('GetMangaBySlugUseCase', () => {
       expect(gateway.getMangaBySlug).toHaveBeenCalledWith('solo-leveling');
       expect(repo.upsertBySlug).toHaveBeenCalled();
       expect(result.slug).toBe('solo-leveling');
+    });
+  });
+
+  describe('Given viewer autenticado (JWT)', () => {
+    it('should expose chaptersReadCount from reading_progress for barra global no detalhe', async () => {
+      const findByUserAndManga = jest.fn().mockResolvedValue({
+        id: 'p1',
+        userId: 'u1',
+        mangaId: 'm1',
+        chapterId: 'ch1',
+        pageNumber: 1,
+        chaptersReadCount: 42,
+        lastReadAt: new Date('2026-01-01'),
+      });
+      const progress = makeReadingProgressRepo({ findByUserAndManga });
+      const chapterRepo = makeChapterRepoForDetail({
+        resolveChaptersReadCountsForBookmarks: jest
+          .fn()
+          .mockResolvedValue([42]),
+      });
+      const repo = makeRepo({
+        findBySlug: jest.fn().mockResolvedValue(DETAIL_STUB),
+      });
+      const gateway = makeGateway({
+        getMangaBySlug: jest.fn().mockResolvedValue(EXTERNAL_MANGA),
+      });
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        makeSync() as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
+        progress,
+        chapterRepo,
+      );
+
+      const result = await sut.execute('solo-leveling', {
+        userId: 'u1',
+        role: 'USER',
+      });
+      await flushSetImmediate();
+
+      expect(findByUserAndManga).toHaveBeenCalledWith('u1', 'm1');
+      expect(chapterRepo.resolveChaptersReadCountsForBookmarks).toHaveBeenCalledWith(
+        [{ mangaId: 'm1', bookmarkChapterId: 'ch1' }],
+      );
+      expect(result.chaptersReadCount).toBe(42);
+    });
+
+    it('should use chaptersReadCount 0 when ainda não há registro de progresso', async () => {
+      const progress = makeReadingProgressRepo({
+        findByUserAndManga: jest.fn().mockResolvedValue(null),
+      });
+      const repo = makeRepo({
+        findBySlug: jest.fn().mockResolvedValue(DETAIL_STUB),
+      });
+      const gateway = makeGateway({
+        getMangaBySlug: jest.fn().mockResolvedValue(EXTERNAL_MANGA),
+      });
+      const sut = new GetMangaBySlugUseCase(
+        repo,
+        gateway,
+        makeSync() as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
+        progress,
+        makeChapterRepoForDetail(),
+      );
+
+      const result = await sut.execute('solo-leveling', {
+        userId: 'u1',
+        role: 'USER',
+      });
+      await flushSetImmediate();
+
+      expect(result.chaptersReadCount).toBe(0);
     });
   });
 
@@ -201,6 +357,8 @@ describe('GetMangaBySlugUseCase', () => {
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
+        makeReadingProgressRepo(),
+        makeChapterRepoForDetail(),
       );
 
       await expect(sut.execute('non-existent')).rejects.toThrow(NotFoundError);
@@ -226,6 +384,8 @@ describe('GetMangaBySlugUseCase', () => {
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
+        makeReadingProgressRepo(),
+        makeChapterRepoForDetail(),
       );
       const result = await sut.execute('solo-leveling');
 
@@ -248,6 +408,8 @@ describe('GetMangaBySlugUseCase', () => {
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
+        makeReadingProgressRepo(),
+        makeChapterRepoForDetail(),
       );
 
       await expect(sut.execute('   ')).rejects.toThrow(NotFoundError);

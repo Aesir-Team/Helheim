@@ -11,9 +11,6 @@ import {
   type ExternalMangaSummaryDto,
 } from '../ports/external-manga-gateway.port';
 
-const HOME_LIMIT_DEFAULT = 10;
-const HOME_LIMIT_CAP = 24;
-
 function toUpsertFromExternalSummary(
   e: ExternalMangaSummaryDto,
 ): UpsertMangaInput {
@@ -61,21 +58,17 @@ export class GetHomeFeedUseCase {
   ) {}
 
   async execute(input: GetHomeFeedInput): Promise<HomeFeedDto> {
-    const limit = Math.min(Math.max(input.limit ?? HOME_LIMIT_DEFAULT, 1), HOME_LIMIT_CAP);
+    const limit = Math.min(Math.max(input.limit ?? 10, 1), 100);
     const includeNsfw = input.includeNsfw;
 
     const trending = await this.resolveTrending(limit, includeNsfw);
     const trendingSlugs = new Set(trending.map((m) => m.slug));
 
-    const recommendedPage = await this.mangaRepo.list({
-      page: 1,
-      limit: limit * 3,
-      sortBy: 'rating',
+    const recommended = await this.resolveRecommendedExcludingTrending(
+      limit,
+      trendingSlugs,
       includeNsfw,
-    });
-    const recommended = recommendedPage.data
-      .filter((m) => !trendingSlugs.has(m.slug))
-      .slice(0, limit);
+    );
 
     const latestPage = await this.mangaRepo.list({
       page: 1,
@@ -89,6 +82,53 @@ export class GetHomeFeedUseCase {
       recommended,
       latestUpdates: latestPage.data,
     };
+  }
+
+  /**
+   * Maior rating no BD, excluindo slugs já em trending, até `limit` itens.
+   * Pagina o catálogo porque um único lote `limit*2` pode esvaziar quase todo
+   * se coincidir com trending (ex.: pedir 10 e vir só 4).
+   */
+  private async resolveRecommendedExcludingTrending(
+    limit: number,
+    trendingSlugs: ReadonlySet<string>,
+    includeNsfw?: boolean,
+  ): Promise<MangaSummaryDto[]> {
+    const out: MangaSummaryDto[] = [];
+    const seen = new Set<string>();
+    const pageSize = Math.max(limit * 2, 1);
+    let page = 1;
+
+    while (out.length < limit) {
+      const batch = await this.mangaRepo.list({
+        page,
+        limit: pageSize,
+        sortBy: 'rating',
+        includeNsfw,
+      });
+
+      if (batch.data.length === 0) {
+        break;
+      }
+
+      for (const m of batch.data) {
+        if (out.length >= limit) {
+          break;
+        }
+        if (trendingSlugs.has(m.slug) || seen.has(m.slug)) {
+          continue;
+        }
+        seen.add(m.slug);
+        out.push(m);
+      }
+
+      if (page >= batch.totalPages) {
+        break;
+      }
+      page += 1;
+    }
+
+    return out;
   }
 
   private async resolveTrending(
@@ -108,7 +148,10 @@ export class GetHomeFeedUseCase {
       );
 
       const orderedSlugs = items.map((item) => item.slug);
-      const bySlugs = await this.mangaRepo.listBySlugs(orderedSlugs, includeNsfw);
+      const bySlugs = await this.mangaRepo.listBySlugs(
+        orderedSlugs,
+        includeNsfw,
+      );
       if (bySlugs.length > 0) {
         return bySlugs.slice(0, limit);
       }

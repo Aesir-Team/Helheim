@@ -11,6 +11,7 @@ import type {
 } from '../../application/ports/chapter.repository.port';
 import { applyMangaChapterFreeTier } from '../../../../shared/infrastructure/prisma/apply-manga-chapter-free-tier';
 import { compareChapterNumberAsc } from '../../../../shared/domain/chapter-free-tier.policy';
+import { countPublishedChapterNumbersUpToBookmark } from '../../../../shared/domain/chapter-read-progress-count.policy';
 
 @Injectable()
 export class PrismaChapterRepository implements ChapterRepositoryPort {
@@ -32,6 +33,78 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
       select: { number: true },
     });
     return rows.map((row) => row.number);
+  }
+
+  async countPublishedByMangaId(mangaId: string): Promise<number> {
+    return this.prisma.chapter.count({
+      where: {
+        mangaId,
+        deletedAt: null,
+        releaseStatus: 'published',
+      },
+    });
+  }
+
+  async countPublishedWithNumberAtMost(
+    mangaId: string,
+    maxChapterNumber: string,
+  ): Promise<number> {
+    const rows = await this.prisma.chapter.findMany({
+      where: {
+        mangaId,
+        deletedAt: null,
+        releaseStatus: 'published',
+      },
+      select: { number: true },
+    });
+    return countPublishedChapterNumbersUpToBookmark(
+      rows.map((r) => r.number),
+      maxChapterNumber,
+    );
+  }
+
+  async resolveChaptersReadCountsForBookmarks(
+    items: readonly { mangaId: string; bookmarkChapterId: string }[],
+  ): Promise<number[]> {
+    if (items.length === 0) {
+      return [];
+    }
+    const chapterIds = [...new Set(items.map((i) => i.bookmarkChapterId))];
+    const bookmarks = await this.prisma.chapter.findMany({
+      where: {
+        id: { in: chapterIds },
+        deletedAt: null,
+        releaseStatus: 'published',
+      },
+      select: { id: true, mangaId: true, number: true },
+    });
+    const bmById = new Map(bookmarks.map((b) => [b.id, b]));
+    const mangaIds = [...new Set(items.map((i) => i.mangaId))];
+    const numbersByManga = new Map<string, string[]>();
+    await Promise.all(
+      mangaIds.map(async (mid) => {
+        const rows = await this.prisma.chapter.findMany({
+          where: {
+            mangaId: mid,
+            deletedAt: null,
+            releaseStatus: 'published',
+          },
+          select: { number: true },
+        });
+        numbersByManga.set(
+          mid,
+          rows.map((r) => r.number),
+        );
+      }),
+    );
+    return items.map((item) => {
+      const bm = bmById.get(item.bookmarkChapterId);
+      if (bm == null || bm.mangaId !== item.mangaId) {
+        return 0;
+      }
+      const nums = numbersByManga.get(item.mangaId) ?? [];
+      return countPublishedChapterNumbersUpToBookmark(nums, bm.number);
+    });
   }
 
   async listByMangaSlug(

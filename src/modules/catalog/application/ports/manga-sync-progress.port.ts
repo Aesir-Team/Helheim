@@ -12,7 +12,9 @@ export interface MangaSyncProgressState {
   status: 'running' | 'completed' | 'timeout' | 'failed';
   startedAt: string;
   deadlineAt: string;
+  /** Total de capítulos publicados na lista da fonte (denominador do progresso). */
   totalChapters: number;
+  /** Já persistidos antes deste run + upserts neste run (numerador). */
   chaptersProcessed: number;
   lastChapterNumber: string | null;
   /** Até 3 URLs da última página processada (debug / painel). */

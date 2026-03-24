@@ -20,6 +20,7 @@ function makeRepo(
     }),
     listBySlugs: jest.fn().mockResolvedValue([]),
     upsertBySlug: jest.fn().mockResolvedValue({ id: 'm1' }),
+    mergeReportedChapterCount: jest.fn().mockResolvedValue(undefined),
     linkCategories: jest.fn().mockResolvedValue(undefined),
     getSyncStatus: jest
       .fn()
@@ -34,6 +35,13 @@ function makeChapterRepo(
 ): ChapterRepositoryPort {
   return {
     findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
+    countPublishedByMangaId: jest.fn().mockResolvedValue(0),
+    countPublishedWithNumberAtMost: jest.fn().mockResolvedValue(0),
+    resolveChaptersReadCountsForBookmarks: jest
+      .fn()
+      .mockImplementation((items: readonly unknown[]) =>
+        Promise.resolve(items.map(() => 0)),
+      ),
     listByMangaSlug: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     listPublishedSummariesFromMangaSlugFromNumberAsc: jest
       .fn()
@@ -174,6 +182,10 @@ describe('SyncMangaFromSourceUseCase', () => {
         title: 'Solo Leveling',
       }),
     );
+    expect(repo.mergeReportedChapterCount).toHaveBeenCalledWith(
+      'solo-leveling',
+      2,
+    );
     expect(gateway.getChapterById).toHaveBeenCalledTimes(2);
     expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 2 });
@@ -186,6 +198,7 @@ describe('SyncMangaFromSourceUseCase', () => {
         status: 'completed',
         slug: 'solo-leveling',
         mangaType: 'manhwa',
+        totalChapters: 2,
         chaptersProcessed: 2,
       }),
     );
@@ -212,7 +225,8 @@ describe('SyncMangaFromSourceUseCase', () => {
         pages: [{ pageNumber: 1, imageUrl: 'https://img/2.jpg' }],
       }),
     });
-    const sut = makeSut(makeRepo(), chapterRepo, gateway);
+    const progress = makeProgress();
+    const sut = makeSut(makeRepo(), chapterRepo, gateway, progress);
 
     const result = await sut.execute('solo-leveling');
 
@@ -231,6 +245,21 @@ describe('SyncMangaFromSourceUseCase', () => {
       freeFraction: 0.1,
       coinChapterCost: 1,
     });
+    expect(progress.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'running',
+        slug: 'solo-leveling',
+        totalChapters: 2,
+        chaptersProcessed: 1,
+      }),
+    );
+    expect(progress.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        totalChapters: 2,
+        chaptersProcessed: 2,
+      }),
+    );
   });
 
   it('Given deadline 0, should timeout before getChapterById and publish timeout state', async () => {
@@ -270,6 +299,8 @@ describe('SyncMangaFromSourceUseCase', () => {
       expect.objectContaining({
         status: 'timeout',
         slug: 'slow',
+        totalChapters: 1,
+        chaptersProcessed: 0,
         errorMessage: 'manga_sync_deadline_exceeded',
       }),
     );

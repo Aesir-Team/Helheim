@@ -24,7 +24,15 @@ export interface MangaDetailDto extends MangaSummaryDto {
   author: string | null;
   artist: string | null;
   officialLink: string | null;
+  /** Denominador para UI: max(capítulos publicados no BD, total reportado pela fonte). */
   chaptersCount: number;
+  /** Capítulos publicados já persistidos (durante sync pode ser < chaptersCount). */
+  chaptersSyncedCount: number;
+  /**
+   * Com JWT: capítulos “lidos até ao marcador” (contagem publicados com `number` ≤ ao do `chapterId` em reading_progress), igual a `isRead` na listagem.
+   * **0** se não há progresso. Sem JWT: **null**.
+   */
+  chaptersReadCount: number | null;
   /** Últimos capítulos publicados (por `createdAt` desc); mesmo formato resumido da listagem paginada antes do enricher no use case. */
   latestChapters: ChapterSummaryDto[];
 }
@@ -94,6 +102,16 @@ export interface MangaRepositoryPort {
     includeNsfw?: boolean,
   ): Promise<MangaSummaryDto[]>;
   upsertBySlug(data: UpsertMangaInput): Promise<{ id: string }>;
+
+  /**
+   * Atualiza `reportedChapterCount` = max(valor atual, candidate).
+   * Usado na ingestão do GET manga externo e no sync.
+   */
+  mergeReportedChapterCount(
+    slug: string,
+    candidateCount: number,
+  ): Promise<void>;
+
   /** Upsert categorias e vincula ao mangá (substituindo links anteriores). */
   linkCategories(
     mangaId: string,

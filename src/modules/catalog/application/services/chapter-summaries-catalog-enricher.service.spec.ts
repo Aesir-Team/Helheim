@@ -38,6 +38,9 @@ describe('ChapterSummariesCatalogEnricher', () => {
 
     const chapterRepo: ChapterRepositoryPort = {
       findExistingNumbersByMangaId: jest.fn(),
+      countPublishedByMangaId: jest.fn(),
+      countPublishedWithNumberAtMost: jest.fn(),
+      resolveChaptersReadCountsForBookmarks: jest.fn(),
       listByMangaSlug: jest.fn(),
       listPublishedSummariesFromMangaSlugFromNumberAsc: jest.fn(),
       findById: jest.fn().mockResolvedValue(null),

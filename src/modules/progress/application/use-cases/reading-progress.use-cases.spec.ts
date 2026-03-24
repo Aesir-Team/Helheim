@@ -57,6 +57,7 @@ function makeMangaRepo(
     findByIdForListItem: jest.fn().mockResolvedValue(MANGA),
     list: jest.fn(),
     upsertBySlug: jest.fn(),
+    mergeReportedChapterCount: jest.fn(),
     linkCategories: jest.fn(),
     getSyncStatus: jest.fn(),
     setSyncStatus: jest.fn(),
@@ -69,6 +70,13 @@ function makeChapterRepo(
 ): ChapterRepositoryPort {
   return {
     findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
+    countPublishedByMangaId: jest.fn().mockResolvedValue(0),
+    countPublishedWithNumberAtMost: jest.fn().mockResolvedValue(1),
+    resolveChaptersReadCountsForBookmarks: jest
+      .fn()
+      .mockImplementation((items: readonly unknown[]) =>
+        Promise.resolve(items.map(() => 0)),
+      ),
     listByMangaSlug: jest.fn(),
     listPublishedSummariesFromMangaSlugFromNumberAsc: jest.fn(),
     findById: jest.fn().mockResolvedValue(CHAPTER),
@@ -134,7 +142,7 @@ describe('Reading progress (PRODUTO §3.6)', () => {
         mangaId: 'm1',
         chapterId: 'ch1',
         pageNumber: 2,
-        chaptersReadCount: 3,
+        chaptersReadCount: 1,
         lastReadAt: new Date('2026-01-05'),
       };
       const progressRepo = makeProgressRepo({
@@ -150,7 +158,6 @@ describe('Reading progress (PRODUTO §3.6)', () => {
         mangaId: 'm1',
         chapterId: 'ch1',
         pageNumber: 2,
-        chaptersReadCount: 3,
       });
       expect(out).toBe(existing);
       expect(progressRepo.upsert).not.toHaveBeenCalled();
@@ -186,17 +193,17 @@ describe('Reading progress (PRODUTO §3.6)', () => {
       expect(progressRepo.upsert).toHaveBeenCalled();
     });
 
-    it('should increment chaptersReadCount when chapter changes and count omitted', async () => {
+    it('should set chaptersReadCount from bookmark position when chapter changes', async () => {
       const existing = {
         id: 'p1',
         userId: 'u1',
         mangaId: 'm1',
         chapterId: 'ch1',
         pageNumber: 1,
-        chaptersReadCount: 2,
+        chaptersReadCount: 1,
         lastReadAt: new Date('2026-01-05'),
       };
-      const ch2 = { ...CHAPTER, id: 'ch2', mangaId: 'm1' };
+      const ch2 = { ...CHAPTER, id: 'ch2', mangaId: 'm1', number: '2' };
       const progressRepo = makeProgressRepo({
         findByUserAndManga: jest.fn().mockResolvedValue(existing),
         upsert: jest
@@ -210,6 +217,7 @@ describe('Reading progress (PRODUTO §3.6)', () => {
         makeMangaRepo(),
         makeChapterRepo({
           findById: jest.fn().mockResolvedValue(ch2),
+          countPublishedWithNumberAtMost: jest.fn().mockResolvedValue(2),
         }),
       );
       await sut.execute({
@@ -220,7 +228,7 @@ describe('Reading progress (PRODUTO §3.6)', () => {
       expect(progressRepo.upsert).toHaveBeenCalledWith(
         'u1',
         'm1',
-        expect.objectContaining({ chaptersReadCount: 3 }) as Record<
+        expect.objectContaining({ chaptersReadCount: 2 }) as Record<
           string,
           unknown
         >,
@@ -231,14 +239,14 @@ describe('Reading progress (PRODUTO §3.6)', () => {
   describe('GetContinueReadingUseCase', () => {
     it('should cap limit at 100', async () => {
       const progressRepo = makeProgressRepo();
-      const sut = new GetContinueReadingUseCase(progressRepo);
+      const sut = new GetContinueReadingUseCase(makeChapterRepo(), progressRepo);
       await sut.execute('u1', 9999);
       expect(progressRepo.listContinueReading).toHaveBeenCalledWith('u1', 100);
     });
 
     it('should use at least 1', async () => {
       const progressRepo = makeProgressRepo();
-      const sut = new GetContinueReadingUseCase(progressRepo);
+      const sut = new GetContinueReadingUseCase(makeChapterRepo(), progressRepo);
       await sut.execute('u1', 0);
       expect(progressRepo.listContinueReading).toHaveBeenCalledWith('u1', 1);
     });

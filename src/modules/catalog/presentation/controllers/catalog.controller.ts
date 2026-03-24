@@ -50,9 +50,14 @@ export class CatalogController {
   @ApiOperation({
     summary: 'Home agregada do catálogo',
     description:
-      'Monta os blocos da home (trending, recomendados e últimas atualizações). Busca trending na Nexustoons, faz upsert no catálogo e responde com dados locais.',
+      'Monta os blocos da home (trending, recomendados e últimas atualizações). Busca trending na Nexustoons, faz upsert no catálogo e responde com dados locais. `recommended` tem até `limit` entradas (rating desc.), excluindo duplicados do trending, paginando o BD se necessário.',
   })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Tamanho de cada bloco (default 10, máx. 100).',
+  })
   @ApiQuery({ name: 'includeNsfw', required: false, type: Boolean })
   @ApiResponse({ status: 200, type: HomeFeedResponseDto })
   async homeRoute(
@@ -125,7 +130,7 @@ export class CatalogController {
   @ApiOperation({
     summary: 'Detalhe de um mangá por slug',
     description:
-      'Consulta a Nexustoons, upsert do mangá no catálogo, resposta a partir do banco; em seguida agenda sync de capítulos/páginas em background (com cooldown de 24h após sync completo). Falha na fonte não bloqueia detalhe local. **JWT opcional:** em `latestChapters`, `isLocked` / `isRead` / `isNew` seguem a mesma regra que `GET .../chapters` (Bearer inválido → **401**).',
+      'Consulta a Nexustoons, upsert do mangá no catálogo, resposta a partir do banco; em seguida agenda sync de capítulos/páginas em background (com cooldown de 24h após sync completo). Falha na fonte não bloqueia detalhe local. **JWT opcional:** `chaptersReadCount` (barra global de lidos vs `chaptersCount`) com token válido; em `latestChapters`, `isLocked` / `isRead` / `isNew` como `GET .../chapters` (Bearer inválido → **401**).',
   })
   @ApiResponse({ status: 200, type: MangaDetailResponseDto })
   @ApiResponse({ status: 401, type: ErrorResponseDto })

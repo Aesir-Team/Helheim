@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
+import { resolveMangaChaptersDisplayCount } from '../../../../shared/domain/manga-chapter-display-count.policy';
 import type {
   ReadingProgressRepositoryPort,
   ReadingProgressRowDto,
@@ -85,6 +86,7 @@ export class PrismaReadingProgressRepository implements ReadingProgressRepositor
             title: true,
             slug: true,
             coverImage: true,
+            reportedChapterCount: true,
             _count: {
               select: {
                 chapters: {
@@ -109,7 +111,10 @@ export class PrismaReadingProgressRepository implements ReadingProgressRepositor
       mangaTitle: r.manga.title,
       mangaSlug: r.manga.slug,
       mangaCoverImage: r.manga.coverImage,
-      chaptersCount: r.manga._count.chapters,
+      chaptersCount: resolveMangaChaptersDisplayCount(
+        r.manga._count.chapters,
+        r.manga.reportedChapterCount,
+      ),
       chapterId: r.chapterId,
       chapterNumber: r.chapter.number,
       chapterTitle: r.chapter.title,

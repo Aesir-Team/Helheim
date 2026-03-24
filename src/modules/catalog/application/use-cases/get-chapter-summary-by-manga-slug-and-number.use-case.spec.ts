@@ -50,6 +50,13 @@ function makeRepo(
 ): ChapterRepositoryPort {
   return {
     findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
+    countPublishedByMangaId: jest.fn().mockResolvedValue(0),
+    countPublishedWithNumberAtMost: jest.fn().mockResolvedValue(0),
+    resolveChaptersReadCountsForBookmarks: jest
+      .fn()
+      .mockImplementation((items: readonly unknown[]) =>
+        Promise.resolve(items.map(() => 0)),
+      ),
     listByMangaSlug: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     listPublishedSummariesFromMangaSlugFromNumberAsc: jest
       .fn()

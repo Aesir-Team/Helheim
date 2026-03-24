@@ -10,7 +10,8 @@ export class HomeFeedResponseDto {
 
   @ApiProperty({
     type: [MangaSummaryResponseDto],
-    description: 'Itens recomendados do catálogo local (maior rating).',
+    description:
+      'Até `limit` itens do catálogo local (maior rating), **excluindo** slugs já em `trending` (sem duplicar). Se o primeiro lote coincidir muito com trending, a API **pagina** o catálogo até encher `limit` ou esgotar obras.',
   })
   recommended!: MangaSummaryResponseDto[];
 

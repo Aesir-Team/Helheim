@@ -23,7 +23,6 @@ export interface SaveReadingProgressInput {
   mangaId: string;
   chapterId: string;
   pageNumber?: number;
-  chaptersReadCount?: number;
 }
 
 @Injectable()
@@ -66,19 +65,12 @@ export class SaveReadingProgressUseCase {
       throw new ConflictError('pageNumber deve ser >= 1');
     }
 
-    let chaptersReadCount: number;
-    if (input.chaptersReadCount !== undefined) {
-      if (input.chaptersReadCount < 0) {
-        throw new ConflictError('chaptersReadCount deve ser >= 0');
-      }
-      chaptersReadCount = input.chaptersReadCount;
-    } else if (!existing) {
-      chaptersReadCount = 1;
-    } else if (existing.chapterId === input.chapterId) {
-      chaptersReadCount = existing.chaptersReadCount;
-    } else {
-      chaptersReadCount = existing.chaptersReadCount + 1;
-    }
+    /** Alinhado a `isRead` na listagem: capítulos com `number` ≤ ao marcador (não contador de visitas). */
+    const chaptersReadCount =
+      await this.chapterRepo.countPublishedWithNumberAtMost(
+        input.mangaId,
+        chapter.number,
+      );
 
     const now = new Date();
     if (

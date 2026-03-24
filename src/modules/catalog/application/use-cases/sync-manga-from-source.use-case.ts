@@ -149,6 +149,15 @@ export class SyncMangaFromSourceUseCase {
       const chaptersToSync = publishedChapters.filter(
         (ch) => !existingNumbers.has(ch.number),
       );
+
+      await this.mangaRepo.mergeReportedChapterCount(
+        slug,
+        publishedChapters.length,
+      );
+
+      const chaptersAlreadyPersisted =
+        publishedChapters.length - chaptersToSync.length;
+
       const deadlineMs = parsePositiveMs(
         this.config.get<string | number>('MANGA_SYNC_DEADLINE_MS'),
         3 * 60 * 60 * 1000,
@@ -167,8 +176,8 @@ export class SyncMangaFromSourceUseCase {
         status: 'running',
         startedAt: startedAt.toISOString(),
         deadlineAt: deadlineAt.toISOString(),
-        totalChapters: chaptersToSync.length,
-        chaptersProcessed: 0,
+        totalChapters: publishedChapters.length,
+        chaptersProcessed: chaptersAlreadyPersisted,
         lastChapterNumber: null,
         lastImageUrlPreview: [],
         updatedAt: startedAt.toISOString(),
@@ -185,8 +194,8 @@ export class SyncMangaFromSourceUseCase {
             status: 'timeout',
             startedAt: startedAt.toISOString(),
             deadlineAt: deadlineAt.toISOString(),
-            totalChapters: chaptersToSync.length,
-            chaptersProcessed: chaptersUpserted,
+            totalChapters: publishedChapters.length,
+            chaptersProcessed: chaptersAlreadyPersisted + chaptersUpserted,
             lastChapterNumber: ch.number,
             lastImageUrlPreview: [],
             updatedAt: nowIso,
@@ -198,6 +207,7 @@ export class SyncMangaFromSourceUseCase {
             'manga_sync_deadline_exceeded',
           );
           await this.applyFreeTierForMangaSafe(mangaId);
+          await this.mergeDbChapterCountIntoReported(slug, mangaId);
           return { mangaId, chaptersUpserted };
         }
 
@@ -230,8 +240,8 @@ export class SyncMangaFromSourceUseCase {
           status: 'running',
           startedAt: startedAt.toISOString(),
           deadlineAt: deadlineAt.toISOString(),
-          totalChapters: chaptersToSync.length,
-          chaptersProcessed: chaptersUpserted,
+          totalChapters: publishedChapters.length,
+          chaptersProcessed: chaptersAlreadyPersisted + chaptersUpserted,
           lastChapterNumber: ch.number,
           lastImageUrlPreview: preview,
           updatedAt: new Date().toISOString(),
@@ -245,8 +255,8 @@ export class SyncMangaFromSourceUseCase {
         status: 'completed',
         startedAt: startedAt.toISOString(),
         deadlineAt: deadlineAt.toISOString(),
-        totalChapters: chaptersToSync.length,
-        chaptersProcessed: chaptersUpserted,
+        totalChapters: publishedChapters.length,
+        chaptersProcessed: chaptersAlreadyPersisted + chaptersUpserted,
         lastChapterNumber:
           chaptersToSync.length > 0
             ? chaptersToSync[chaptersToSync.length - 1].number
@@ -256,6 +266,7 @@ export class SyncMangaFromSourceUseCase {
       });
 
       await this.applyFreeTierForMangaSafe(mangaId);
+      await this.mergeDbChapterCountIntoReported(slug, mangaId);
       await this.mangaRepo.setSyncStatus(slug, 'idle');
       return { mangaId, chaptersUpserted };
     } catch (err) {
@@ -276,6 +287,21 @@ export class SyncMangaFromSourceUseCase {
       });
       await this.mangaRepo.setSyncStatus(slug, 'error', message);
       return null;
+    }
+  }
+
+  private async mergeDbChapterCountIntoReported(
+    slug: string,
+    mangaId: string,
+  ): Promise<void> {
+    try {
+      const dbCount = await this.chapterRepo.countPublishedByMangaId(mangaId);
+      await this.mangaRepo.mergeReportedChapterCount(slug, dbCount);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `mergeDbChapterCountIntoReported failed slug=${slug}: ${message}`,
+      );
     }
   }
 

@@ -50,6 +50,7 @@ function makeMangaRepo(
     }),
     list: jest.fn(),
     upsertBySlug: jest.fn(),
+    mergeReportedChapterCount: jest.fn(),
     linkCategories: jest.fn(),
     getSyncStatus: jest.fn(),
     setSyncStatus: jest.fn(),

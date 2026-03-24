@@ -59,6 +59,24 @@ export interface ChapterRepositoryPort {
     numbers: string[],
   ): Promise<string[]>;
 
+  /** Capítulos publicados e não soft-deleted do mangá. */
+  countPublishedByMangaId(mangaId: string): Promise<number>;
+
+  /**
+   * Quantos capítulos publicados do mangá têm `number` ≤ `maxChapterNumber` (ordem natural, alinhado a `isRead` na listagem).
+   */
+  countPublishedWithNumberAtMost(
+    mangaId: string,
+    maxChapterNumber: string,
+  ): Promise<number>;
+
+  /**
+   * Para cada item, conta capítulos publicados com `number` ≤ ao do capítulo-marcador (valida `mangaId`).
+   */
+  resolveChaptersReadCountsForBookmarks(
+    items: readonly { mangaId: string; bookmarkChapterId: string }[],
+  ): Promise<number[]>;
+
   listByMangaSlug(
     mangaSlug: string,
     options: { order: 'asc' | 'desc'; page: number; limit: number },
