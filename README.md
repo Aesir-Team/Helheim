@@ -29,6 +29,8 @@ API NestJS (catálogo de mangás/manhwas, acesso por plano, listas, progresso). 
 
 Rotas (tabela) e decisão **coin**: **`docs/API-ROTAS-MVP.md`**. Contratos detalhados: **`docs/API-MVP-DETALHADA.md`**.
 
+**App (lista de capítulos, `isLocked` / `isRead` / `isNew`, JWT opcional):** seguir sempre a secção **«Integração cliente — lista de capítulos e flags»** em `docs/API-MVP-DETALHADA.md` (§ Catálogo) e o **Checklist integrador** em `docs/API-ROTAS-MVP.md`.
+
 ### Rodar o MVP localmente
 
 ```bash

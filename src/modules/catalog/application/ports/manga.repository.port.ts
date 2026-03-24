@@ -1,3 +1,5 @@
+import type { ChapterSummaryDto } from './chapter.repository.port';
+
 export const MANGA_REPOSITORY = Symbol('MANGA_REPOSITORY');
 
 export interface MangaSummaryDto {
@@ -23,14 +25,8 @@ export interface MangaDetailDto extends MangaSummaryDto {
   artist: string | null;
   officialLink: string | null;
   chaptersCount: number;
-  latestChapters: ChapterPreviewDto[];
-}
-
-export interface ChapterPreviewDto {
-  id: string;
-  number: string;
-  title: string | null;
-  createdAt: Date;
+  /** Últimos capítulos publicados (por `createdAt` desc); mesmo formato resumido da listagem paginada antes do enricher no use case. */
+  latestChapters: ChapterSummaryDto[];
 }
 
 export interface ListMangasParams {

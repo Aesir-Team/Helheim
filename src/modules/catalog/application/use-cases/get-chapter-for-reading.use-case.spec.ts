@@ -20,6 +20,8 @@ const DETAIL: ChapterDetailDto = {
   coinCost: 0,
   views: 10,
   createdAt: new Date('2026-01-02'),
+  isRead: false,
+  isNew: false,
   mangaSlug: 'solo',
   mangaTitle: 'Solo',
   pages: [
@@ -162,6 +164,7 @@ describe('GetChapterForReadingUseCase', () => {
       ]);
       expect(out.prevChapterId).toBe('ch-1');
       expect(out.nextChapterId).toBe('ch-3');
+      expect(out.isRead).toBe(true);
       expect(checkChapterAccess.execute).toHaveBeenCalledWith({
         userId: 'u1',
         role: 'USER',
@@ -207,6 +210,7 @@ describe('GetChapterForReadingUseCase', () => {
       ]);
       expect(checkChapterAccess.execute).not.toHaveBeenCalled();
       expect(saveReadingProgress.execute).not.toHaveBeenCalled();
+      expect(out.isRead).toBe(false);
     });
   });
 
@@ -217,6 +221,8 @@ describe('GetChapterForReadingUseCase', () => {
         accessLevel: 'coin',
         isLocked: true,
         coinCost: 10,
+        isRead: false,
+        isNew: false,
       };
       const repo = makeRepo({
         findById: jest.fn().mockResolvedValue(coinDetail),

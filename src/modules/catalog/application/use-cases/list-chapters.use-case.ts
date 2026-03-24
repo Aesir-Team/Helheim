@@ -8,6 +8,7 @@ import {
   ChapterSummariesViewerLockApplier,
   type ChapterListViewerContext,
 } from '../services/chapter-summaries-viewer-lock.applier';
+import { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
 
 export interface ListChaptersInput {
   mangaSlug: string;
@@ -31,6 +32,7 @@ export class ListChaptersUseCase {
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: ChapterRepositoryPort,
     private readonly viewerLockApplier: ChapterSummariesViewerLockApplier,
+    private readonly summaryEnricher: ChapterSummariesCatalogEnricher,
   ) {}
 
   async execute(input: ListChaptersInput): Promise<ListChaptersOutput> {
@@ -44,9 +46,13 @@ export class ListChaptersUseCase {
       limit,
     });
 
-    const data = await this.viewerLockApplier.apply(
+    const locked = await this.viewerLockApplier.apply(
       input.viewer ?? null,
       result.data,
+    );
+    const data = await this.summaryEnricher.enrichSummaries(
+      input.viewer ?? null,
+      locked,
     );
 
     return { data, total: result.total, page, limit };

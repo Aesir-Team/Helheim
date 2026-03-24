@@ -10,6 +10,11 @@ import {
 } from '../ports/external-manga-gateway.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
 import { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
+import {
+  ChapterSummariesViewerLockApplier,
+  type ChapterListViewerContext,
+} from '../services/chapter-summaries-viewer-lock.applier';
+import { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
 
 @Injectable()
 export class GetMangaBySlugUseCase {
@@ -21,9 +26,14 @@ export class GetMangaBySlugUseCase {
     @Inject(EXTERNAL_MANGA_GATEWAY)
     private readonly gateway: ExternalMangaGatewayPort,
     private readonly syncMangaFromSource: SyncMangaFromSourceUseCase,
+    private readonly viewerLockApplier: ChapterSummariesViewerLockApplier,
+    private readonly summaryEnricher: ChapterSummariesCatalogEnricher,
   ) {}
 
-  async execute(slug: string): Promise<MangaDetailDto> {
+  async execute(
+    slug: string,
+    viewer?: ChapterListViewerContext | null,
+  ): Promise<MangaDetailDto> {
     const normalized = slug.trim();
     if (!normalized) {
       throw new NotFoundError('Manga slug is required');
@@ -45,7 +55,17 @@ export class GetMangaBySlugUseCase {
       });
     });
 
-    return persisted;
+    const v = viewer ?? null;
+    const locked = await this.viewerLockApplier.apply(
+      v,
+      persisted.latestChapters,
+    );
+    const latestChapters = await this.summaryEnricher.enrichSummaries(
+      v,
+      locked,
+    );
+
+    return { ...persisted, latestChapters };
   }
 
   /** Alinhado à busca em lista: tenta fonte externa, upsert no catálogo; falha HTTP não bloqueia leitura local. */

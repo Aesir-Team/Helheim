@@ -9,6 +9,10 @@ export interface ChapterSummaryDto {
   isLocked: boolean;
   coinCost: number;
   createdAt: Date;
+  /** Com JWT na listagem: progresso neste mangá (ver `chapter-summary-flags.policy`). */
+  isRead: boolean;
+  /** `createdAt` dentro de `CHAPTER_IS_NEW_MAX_AGE_DAYS` (default 14). */
+  isNew: boolean;
 }
 
 export interface ChapterDetailDto extends ChapterSummaryDto {

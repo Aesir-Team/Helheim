@@ -4,6 +4,7 @@ import type {
   ChapterSummaryDto,
 } from '../ports/chapter.repository.port';
 import type { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
+import type { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
 
 const CHAPTER_STUB: ChapterSummaryDto = {
   id: 'ch-1',
@@ -14,6 +15,8 @@ const CHAPTER_STUB: ChapterSummaryDto = {
   isLocked: false,
   coinCost: 0,
   createdAt: new Date('2026-01-01'),
+  isRead: false,
+  isNew: false,
 };
 
 function makeRepo(
@@ -45,10 +48,22 @@ function makeLockApplier(): ChapterSummariesViewerLockApplier {
   } as unknown as ChapterSummariesViewerLockApplier;
 }
 
+function makeSummaryEnricher(): ChapterSummariesCatalogEnricher {
+  return {
+    enrichSummaries: jest.fn(async (_v, items) =>
+      items.map((s) => ({ ...s, isRead: false, isNew: true })),
+    ),
+  } as unknown as ChapterSummariesCatalogEnricher;
+}
+
 describe('ListChaptersUseCase', () => {
   it('should list chapters with defaults (asc, page 1, limit 50)', async () => {
     const repo = makeRepo();
-    const sut = new ListChaptersUseCase(repo, makeLockApplier());
+    const sut = new ListChaptersUseCase(
+      repo,
+      makeLockApplier(),
+      makeSummaryEnricher(),
+    );
 
     const result = await sut.execute({ mangaSlug: 'solo-leveling' });
 
@@ -62,7 +77,11 @@ describe('ListChaptersUseCase', () => {
 
   it('should cap limit at 200', async () => {
     const repo = makeRepo();
-    const sut = new ListChaptersUseCase(repo, makeLockApplier());
+    const sut = new ListChaptersUseCase(
+      repo,
+      makeLockApplier(),
+      makeSummaryEnricher(),
+    );
 
     await sut.execute({ mangaSlug: 'test', limit: 999 });
 
@@ -75,7 +94,11 @@ describe('ListChaptersUseCase', () => {
 
   it('should forward order and page params', async () => {
     const repo = makeRepo();
-    const sut = new ListChaptersUseCase(repo, makeLockApplier());
+    const sut = new ListChaptersUseCase(
+      repo,
+      makeLockApplier(),
+      makeSummaryEnricher(),
+    );
 
     await sut.execute({ mangaSlug: 'test', order: 'asc', page: 3, limit: 10 });
 

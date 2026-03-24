@@ -5,11 +5,18 @@ import type {
 } from '../ports/chapter.repository.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
 import type { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
+import type { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
 
 function makeLockApplier(): ChapterSummariesViewerLockApplier {
   return {
     apply: jest.fn(async (_v, items) => [...items]),
   } as unknown as ChapterSummariesViewerLockApplier;
+}
+
+function makeSummaryEnricher(): ChapterSummariesCatalogEnricher {
+  return {
+    enrichSummaries: jest.fn(async (_v, items) => [...items]),
+  } as unknown as ChapterSummariesCatalogEnricher;
 }
 
 const S1: ChapterSummaryDto = {
@@ -21,6 +28,8 @@ const S1: ChapterSummaryDto = {
   isLocked: false,
   coinCost: 0,
   createdAt: new Date('2026-01-01'),
+  isRead: false,
+  isNew: false,
 };
 
 const S2: ChapterSummaryDto = {
@@ -32,6 +41,8 @@ const S2: ChapterSummaryDto = {
   isLocked: false,
   coinCost: 0,
   createdAt: new Date('2026-01-02'),
+  isRead: false,
+  isNew: false,
 };
 
 function makeRepo(
@@ -66,6 +77,7 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
       const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
         repo,
         makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       const out = await sut.execute({
@@ -93,6 +105,7 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
       const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
         repo,
         makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       await sut.execute({
@@ -116,6 +129,7 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
       const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
         repo,
         makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       await sut.execute({
@@ -140,6 +154,7 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
       const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
         repo,
         makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       await expect(
@@ -152,6 +167,7 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
       const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
         repo,
         makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       await expect(

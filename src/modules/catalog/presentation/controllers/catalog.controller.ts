@@ -120,18 +120,26 @@ export class CatalogController {
   }
 
   @Get('mangas/:slug')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth('Bearer')
   @ApiOperation({
     summary: 'Detalhe de um mangá por slug',
     description:
-      'Consulta a Nexustoons, upsert do mangá no catálogo, resposta a partir do banco; em seguida agenda sync de capítulos/páginas em background (com cooldown de 24h após sync completo). Falha na fonte não bloqueia detalhe local.',
+      'Consulta a Nexustoons, upsert do mangá no catálogo, resposta a partir do banco; em seguida agenda sync de capítulos/páginas em background (com cooldown de 24h após sync completo). Falha na fonte não bloqueia detalhe local. **JWT opcional:** em `latestChapters`, `isLocked` / `isRead` / `isNew` seguem a mesma regra que `GET .../chapters` (Bearer inválido → **401**).',
   })
   @ApiResponse({ status: 200, type: MangaDetailResponseDto })
+  @ApiResponse({ status: 401, type: ErrorResponseDto })
   @ApiResponse({ status: 404, type: ErrorResponseDto })
   async getMangaBySlugRoute(
+    @Request() req: OptionalAuthenticatedRequest,
     @Param('slug') slug: string,
   ): Promise<MangaDetailResponseDto> {
     try {
-      return await this.getMangaBySlug.execute(slug);
+      const u = req.user;
+      return await this.getMangaBySlug.execute(
+        slug,
+        u ? { userId: u.userId, role: u.role } : null,
+      );
     } catch (err) {
       if (err instanceof NotFoundError) {
         throw new NotFoundException(err.message);

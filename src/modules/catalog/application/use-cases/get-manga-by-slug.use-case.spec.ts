@@ -6,6 +6,20 @@ import type {
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
 import type { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
+import type { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
+import type { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
+
+function makeLockApplier(): ChapterSummariesViewerLockApplier {
+  return {
+    apply: jest.fn(async (_v, items) => [...items]),
+  } as unknown as ChapterSummariesViewerLockApplier;
+}
+
+function makeSummaryEnricher(): ChapterSummariesCatalogEnricher {
+  return {
+    enrichSummaries: jest.fn(async (_v, items) => [...items]),
+  } as unknown as ChapterSummariesCatalogEnricher;
+}
 
 const DETAIL_STUB: MangaDetailDto = {
   id: 'm1',
@@ -101,6 +115,8 @@ describe('GetMangaBySlugUseCase', () => {
         repo,
         gateway,
         sync as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       const result = await sut.execute('solo-leveling');
@@ -131,6 +147,8 @@ describe('GetMangaBySlugUseCase', () => {
         repo,
         gateway,
         sync as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       await sut.execute('  solo-leveling  ');
@@ -157,6 +175,8 @@ describe('GetMangaBySlugUseCase', () => {
         repo,
         gateway,
         sync as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
       );
       const result = await sut.execute('solo-leveling');
 
@@ -179,6 +199,8 @@ describe('GetMangaBySlugUseCase', () => {
         repo,
         gateway,
         sync as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       await expect(sut.execute('non-existent')).rejects.toThrow(NotFoundError);
@@ -202,6 +224,8 @@ describe('GetMangaBySlugUseCase', () => {
         repo,
         gateway,
         sync as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
       );
       const result = await sut.execute('solo-leveling');
 
@@ -222,6 +246,8 @@ describe('GetMangaBySlugUseCase', () => {
         repo,
         gateway,
         sync as unknown as SyncMangaFromSourceUseCase,
+        makeLockApplier(),
+        makeSummaryEnricher(),
       );
 
       await expect(sut.execute('   ')).rejects.toThrow(NotFoundError);

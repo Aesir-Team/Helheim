@@ -22,6 +22,7 @@ import { ListCategoriesUseCase } from './use-cases/list-categories.use-case';
 import { SyncMangaFromSourceUseCase } from './use-cases/sync-manga-from-source.use-case';
 import { GetChapterForReadingUseCase } from './use-cases/get-chapter-for-reading.use-case';
 import { ChapterSummariesViewerLockApplier } from './services/chapter-summaries-viewer-lock.applier';
+import { ChapterSummariesCatalogEnricher } from './services/chapter-summaries-catalog-enricher.service';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { ChapterSummariesViewerLockApplier } from './services/chapter-summaries-
     SyncMangaFromSourceUseCase,
     GetChapterForReadingUseCase,
     ChapterSummariesViewerLockApplier,
+    ChapterSummariesCatalogEnricher,
   ],
   exports: [
     MANGA_REPOSITORY,

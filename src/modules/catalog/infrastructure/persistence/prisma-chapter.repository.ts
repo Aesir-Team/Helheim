@@ -93,6 +93,8 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
       isLocked: row.accessLevel === 'coin',
       coinCost: row.coinCost,
       createdAt: row.createdAt,
+      isRead: false,
+      isNew: false,
     }));
 
     return { data, total };
@@ -157,6 +159,8 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
       isLocked: row.accessLevel === 'coin',
       coinCost: row.coinCost,
       createdAt: row.createdAt,
+      isRead: false,
+      isNew: false,
     }));
 
     return { data, total };
@@ -183,6 +187,8 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
       coinCost: row.coinCost,
       views: row.views,
       createdAt: row.createdAt,
+      isRead: false,
+      isNew: false,
       mangaSlug: row.manga.slug,
       mangaTitle: row.manga.title,
       pages: row.pages.map((p) => ({

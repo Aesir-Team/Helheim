@@ -67,6 +67,7 @@ export class GetChapterForReadingUseCase {
         return {
           ...detail,
           isLocked: false,
+          isRead: false,
           pages: this.sortPages(detail.pages),
           prevChapterId,
           nextChapterId,
@@ -109,6 +110,7 @@ export class GetChapterForReadingUseCase {
     return {
       ...detail,
       isLocked: false,
+      isRead: true,
       pages: this.sortPages(detail.pages),
       prevChapterId,
       nextChapterId,

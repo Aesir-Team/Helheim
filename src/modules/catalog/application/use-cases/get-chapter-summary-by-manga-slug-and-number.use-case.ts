@@ -7,6 +7,7 @@ import { NotFoundError } from '../../../../shared/domain/errors';
 import type { ListChaptersOutput } from './list-chapters.use-case';
 import type { ChapterListViewerContext } from '../services/chapter-summaries-viewer-lock.applier';
 import { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
+import { ChapterSummariesCatalogEnricher } from '../services/chapter-summaries-catalog-enricher.service';
 
 export interface GetChapterSummaryByMangaSlugAndNumberInput {
   mangaSlug: string;
@@ -23,6 +24,7 @@ export class GetChapterSummaryByMangaSlugAndNumberUseCase {
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: ChapterRepositoryPort,
     private readonly viewerLockApplier: ChapterSummariesViewerLockApplier,
+    private readonly summaryEnricher: ChapterSummariesCatalogEnricher,
   ) {}
 
   async execute(
@@ -48,9 +50,13 @@ export class GetChapterSummaryByMangaSlugAndNumberUseCase {
       );
     }
 
-    const data = await this.viewerLockApplier.apply(
+    const locked = await this.viewerLockApplier.apply(
       input.viewer ?? null,
       result.data,
+    );
+    const data = await this.summaryEnricher.enrichSummaries(
+      input.viewer ?? null,
+      locked,
     );
 
     return { data, total: result.total, page, limit };

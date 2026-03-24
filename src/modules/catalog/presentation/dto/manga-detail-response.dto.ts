@@ -1,18 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-class ChapterPreviewResponseDto {
-  @ApiProperty({ example: 'ch-uuid' })
-  id!: string;
-
-  @ApiProperty({ example: '42' })
-  number!: string;
-
-  @ApiPropertyOptional({ example: 'The Awakening' })
-  title!: string | null;
-
-  @ApiProperty({ example: '2026-01-15T00:00:00.000Z' })
-  createdAt!: Date;
-}
+import { ChapterSummaryResponseDto } from './chapter-summary-response.dto';
 
 export class MangaDetailResponseDto {
   @ApiProperty({ example: 'manga-uuid' })
@@ -82,6 +69,10 @@ export class MangaDetailResponseDto {
   @ApiProperty({ example: 180 })
   chaptersCount!: number;
 
-  @ApiProperty({ type: [ChapterPreviewResponseDto] })
-  latestChapters!: ChapterPreviewResponseDto[];
+  @ApiProperty({
+    type: [ChapterSummaryResponseDto],
+    description:
+      'Últimos capítulos publicados (amostra). Com JWT, inclui `isLocked`, `isRead`, `isNew` como na listagem paginada.',
+  })
+  latestChapters!: ChapterSummaryResponseDto[];
 }

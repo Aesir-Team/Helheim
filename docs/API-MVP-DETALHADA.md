@@ -2,6 +2,8 @@
 
 Documento complementar à tabela resumida em [`API-ROTAS-MVP.md`](./API-ROTAS-MVP.md). Descreve contratos HTTP, parâmetros e comportamentos alinhados ao código atual.
 
+**Integradores (app mobile/web):** siga sempre o passo a passo na secção **«Integração cliente — lista de capítulos e flags»** (§ Catálogo, antes de `GET /categories`) ao implementar lista de capítulos, leitura ou indicadores `isLocked` / `isRead` / `isNew`.
+
 ---
 
 ## 1. Convenções gerais
@@ -11,7 +13,8 @@ Documento complementar à tabela resumida em [`API-ROTAS-MVP.md`](./API-ROTAS-MV
 | **Base da API REST** | `{ORIGIN}/api/v1` (ex.: `http://localhost:3000/api/v1`) |
 | **Porta** | `PORT` no `.env`; padrão **3000** |
 | **Content-Type** | `application/json` em corpos de request/response |
-| **Validação** | `ValidationPipe` global: propriedades não declaradas no DTO são rejeitadas (**400** com mensagem de validação no formato Nest). |
+| **Validação (entrada)** | `ValidationPipe` global nos **bodies/queries** dos controllers: propriedades não declaradas no DTO são rejeitadas (**400**). |
+| **Validação (saída)** | O JSON de **resposta** **não** é revalidado pelo `class-validator` no pipeline Nest; o contrato é o **OpenAPI** (`/docs`, `/api-json`) + este documento + código. O cliente deve tratar campos opcionais e evoluir com versões da API. |
 | **Documentação interativa** | **`GET /docs`** — Scalar ( **sem** prefixo `api/v1`) |
 | **OpenAPI JSON** | **`GET /api-json`** — **sem** prefixo `api/v1` |
 
@@ -129,8 +132,9 @@ Por padrão, listagens excluem obras **NSFW** salvo `includeNsfw=true`.
 
 | | |
 |--|--|
-| **Auth** | Não |
-| **200** | Detalhe do mangá + `chaptersCount`, `latestChapters` (ver §8 G.4) |
+| **Auth** | **Opcional** (`Authorization: Bearer`) — sem token, `latestChapters[].isLocked` / `isRead` / `isNew` ficam no modo anónimo (como na listagem sem JWT). Com token, mesmas regras que `GET .../mangas/:slug/chapters`. Bearer **inválido** → **401**. |
+| **200** | Detalhe do mangá + `chaptersCount`, `latestChapters` (amostra dos últimos capítulos publicados por `createdAt` desc.; cada item tem o mesmo formato resumido que na listagem paginada, incl. `accessLevel`, `coinCost`, `mangaId`, `isLocked`, `isRead`, `isNew` quando aplicável) |
+| **401** | `Authorization: Bearer` presente mas token inválido ou expirado |
 | **404** | Slug vazio ou mangá inexistente no BD após tentativa na fonte externa |
 
 Em toda requisição válida, a API **consulta a Nexustoons pelo slug**, faz **upsert** do mangá e responde com o estado no **Prisma**; erro na fonte externa **não impede** retornar o que já estiver salvo localmente. Tipos/status fora do enum Midgard (ex.: `doujinshi`, `hiatus`) são **normalizados** na persistência.
@@ -143,7 +147,7 @@ Após responder **200**, dispara em **background** (`SyncMangaFromSourceUseCase`
 |--|--|
 | **Auth** | **Opcional** (`Authorization: Bearer`) — sem token, `isLocked` = `accessLevel === coin`; com token válido, `isLocked` reflete **VIP/ADMIN/MODERATOR** ou **desbloqueio** (`UserChapterCoinUnlock`). Bearer **inválido** → **401**. |
 | **Query** | `order` (`asc` \| `desc`, default **`asc`** — cap. 1, 2, 3…), `page` (default **1**), `limit` (default **50**, máx. **200**) |
-| **200** | Lista **paginada** de capítulos **publicados** (`public` e `coin`); campo `isLocked` indica bloqueio na UI. Ordenação por `number` em **ordem natural** (ex.: 1, 2, 10 — não lexicográfica). |
+| **200** | Lista **paginada** de capítulos **publicados** (`public` e `coin`); `isLocked` (bloqueio na UI), `isRead` (com JWT: `number` ≤ capítulo do `reading_progress` neste mangá), `isNew` (`createdAt` dentro de `CHAPTER_IS_NEW_MAX_AGE_DAYS`, default 14). Ordenação por `number` em **ordem natural**. |
 
 ### `GET /api/v1/mangas/:slug/chapters/by-number/:number`
 
@@ -156,6 +160,73 @@ Após responder **200**, dispara em **background** (`SyncMangaFromSourceUseCase`
 | **404** | Mangá inexistente, capítulo inexistente, não publicado ou soft-deleted |
 
 Para obter **páginas** de leitura e prev/next, use o `id` de cada item em `GET /api/v1/chapters/:id`.
+
+### Integração cliente — lista de capítulos e flags
+
+Esta secção é o **checklist obrigatório** para o cliente consumir corretamente `GET /mangas/:slug/chapters`, `GET /mangas/:slug/chapters/by-number/:number` e `GET /chapters/:id`, alinhado ao código e ao Swagger.
+
+#### 1. O que a API garante e o que não valida na saída
+
+1. **Entrada (request):** DTOs com `class-validator` onde configurado → erros **400** com mensagens Nest.
+2. **Saída (response):** não há validação automática do JSON retornado; use **OpenAPI** (`GET /api-json` ou `/docs`) como referência de campos. Campos novos podem aparecer (ex.: `isRead`, `isNew`, `mangaId` na lista); o app deve ignorar desconhecidos ou tipar de forma defensiva.
+3. **Campos que a API Midgard não envia** (se aparecem no teu log, são **só do app**): `isDownloaded`, ou qualquer flag de cache/offline que não esteja no schema OpenAPI da rota.
+
+#### 2. `isLocked` na listagem — enviar JWT opcional
+
+1. Nas rotas **`GET /mangas/:slug/chapters`** e **`GET /mangas/:slug/chapters/by-number/:number`**, o guard é **JWT opcional**.
+2. **Sem** `Authorization: Bearer`: `isLocked` é `true` quando `accessLevel === "coin"` (regra bruta do catálogo).
+3. **Com** token válido: `isLocked` passa a refletir **VIP / ADMIN / MODERATOR** (ignoram bloqueio por coin na UI) ou **`UserChapterCoinUnlock`** para capítulos `coin`.
+4. Se enviares `Authorization: Bearer` **inválido** ou expirado → **401** em toda a rota (não há “modo anónimo com header errado”). **Não envies** o header se não tiveres token válido.
+
+**Passos recomendados no app:**
+
+1. Guardar o JWT após login/registo.
+2. Ao pedir a lista de capítulos, enviar `Authorization: Bearer <token>` se o utilizador estiver logado; caso contrário, omitir o header.
+3. Após **logout**, voltar a pedir a lista **sem** o header (ou deixar de anexar o token), para `isLocked` voltar ao modo público.
+
+#### 3. `isRead` na listagem — depende de progresso + JWT
+
+A API calcula `isRead` com base no registo **`reading_progress`** (um por par **utilizador + mangá**), usando o **número do capítulo marcador** (o `chapterId` desse registo resolvido para `number`). Um item da lista fica `isRead: true` se o seu `number` for **≤ ao do marcador** na **ordem natural** de capítulos (mesma regra que a ordenação da lista).
+
+1. **Sem JWT** na listagem: `isRead` é sempre **`false`** para todos os itens (o servidor não sabe quem és).
+2. **Com JWT:** o servidor lê `reading_progress` para `(userId, mangaId)` e aplica a regra acima.
+3. Para existir progresso, o utilizador tem de ter **gravado** leitura ao menos uma vez nesse mangá, tipicamente por:
+   - **`GET /chapters/:id` com JWT** (capítulo `public` ou permitido por VIP/unlock): o servidor faz **upsert** de progresso (ex.: `pageNumber: 1` ao abrir), **ou**
+   - **`PATCH /users/me/reading-progress`** com `mangaId`, `chapterId`, etc.
+
+**Passos recomendados no app:**
+
+1. Utilizador **logado** a ler um capítulo: chamar **`GET /api/v1/chapters/:id`** com **`Authorization: Bearer`** (para `public` e para fluxos que gravam progresso).
+2. Ao **sair** da leitura ou mudar de página, opcionalmente chamar **`PATCH .../reading-progress`** com dados corretos (ver §10 deste doc).
+3. Ao **abrir a lista de capítulos** do mesmo mangá, chamar **`GET .../mangas/:slug/chapters`** (ou `by-number`) **com o mesmo JWT**.
+4. **Refrescar** a lista após ler um capítulo (ou invalidar cache) para ver `isRead` atualizado; se só abriste offline ou sem token, o servidor **não** atualiza progresso.
+
+**Limitação de produto:** não existe histórico “capítulo a capítulo” no BD; há só o **marcador** atual. Se o utilizador saltar para um capítulo à frente, a regra “≤ marcador” pode marcar capítulos intermediários como lidos sem leitura real — documentado em `src/shared/domain/chapter-summary-flags.policy.ts`.
+
+#### 4. `isNew` na listagem
+
+1. Calculado no **servidor**: `true` quando `createdAt` do capítulo está dentro da janela **`CHAPTER_IS_NEW_MAX_AGE_DAYS`** (dias completos; ver `.env.example`; **default 14** se a variável não existir ou for inválida).
+2. **Não** depende do utilizador; o mesmo valor para todos os clientes.
+3. Operador: ajustar a janela via env e reiniciar a API.
+
+#### 5. `GET /chapters/:id` — `isRead` na resposta de leitura
+
+1. **Visitante** (sem JWT) em capítulo `public`: resposta inclui `isRead: false` (sem progresso no servidor).
+2. **Autenticado** com sucesso (acesso concedido): resposta inclui **`isRead: true`** para esse payload (estás a ver o capítulo com sessão válida).
+
+#### 6. Detalhe do mangá (`GET /mangas/:slug`) vs lista paginada
+
+1. O detalhe devolve **`latestChapters`** como **amostra** (últimos **5** publicados por `createdAt` desc.), mas **cada item usa o mesmo formato** que um elemento de `GET /mangas/:slug/chapters` (incl. `accessLevel`, `mangaId`, `isLocked`, `isRead`, `isNew` quando envias **JWT** opcional).
+2. Para a **lista completa** (todos os capítulos, paginada), continua a ser obrigatório **`GET /mangas/:slug/chapters`** (e/ou `by-number`).
+3. Depois de mudares de capítulo na leitura, **refaz** `GET /mangas/:slug` **com JWT** se a UI do detalhe usa só `latestChapters` — senão o cliente pode mostrar `isRead` desatualizado em cache.
+
+#### 7. Ambiente e variáveis (servidor)
+
+| Variável | Efeito |
+|----------|--------|
+| `CHAPTER_IS_NEW_MAX_AGE_DAYS` | Dias para marcar `isNew` na listagem (inteiro > 0; default **14**). |
+
+---
 
 ### `GET /api/v1/categories`
 
@@ -188,7 +259,7 @@ Para obter **páginas** de leitura e prev/next, use o `id` de cada item em `GET 
 
 - **Listagem** `GET /mangas/:slug/chapters`: capítulos **publicados** (`public` e `coin`) em **paginação** (`page`, `limit`, `order`); `isLocked` para UX; ordenação natural por `number`.
 - **Por número** `GET /mangas/:slug/chapters/by-number/:number`: a partir do capítulo com aquele `number`, lista **asc** paginada (deep link + scroll); leitura com imagens em `GET /chapters/:id`.
-- **Preview no detalhe** (`chaptersCount`, `latestChapters`): só **amostra** recente no JSON do mangá; lista completa = endpoint paginado acima.
+- **Preview no detalhe** (`chaptersCount`, `latestChapters`): **amostra** (5 últimos por `createdAt`); itens alinhados ao DTO da listagem + JWT opcional para flags; lista completa = endpoint paginado acima.
 - **Leitura** `GET /chapters/:id`: capítulo **`coin`** **sem JWT** → **403** `reason: authentication_required`; **com JWT** → **403** `reason: coin_chapter_not_unlocked` se não houver desbloqueio (fluxo de débito/unlock em endpoint separado).
 
 Detalhe curto: [`API-ROTAS-MVP.md` § Decisão G.4](./API-ROTAS-MVP.md).

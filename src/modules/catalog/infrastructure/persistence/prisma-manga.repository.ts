@@ -37,7 +37,15 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
           },
           orderBy: { createdAt: 'desc' },
           take: 5,
-          select: { id: true, number: true, title: true, createdAt: true },
+          select: {
+            id: true,
+            mangaId: true,
+            number: true,
+            title: true,
+            createdAt: true,
+            accessLevel: true,
+            coinCost: true,
+          },
         },
         _count: {
           select: {
@@ -80,9 +88,15 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
       chaptersCount: row._count.chapters,
       latestChapters: row.chapters.map((ch) => ({
         id: ch.id,
+        mangaId: ch.mangaId,
         number: ch.number,
         title: ch.title,
+        accessLevel: ch.accessLevel,
+        isLocked: ch.accessLevel === 'coin',
+        coinCost: ch.coinCost,
         createdAt: ch.createdAt,
+        isRead: false,
+        isNew: false,
       })),
     };
   }
