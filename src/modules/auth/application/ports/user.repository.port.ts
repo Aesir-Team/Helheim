@@ -5,17 +5,21 @@ export interface CreateUserInput {
   passwordHash: string;
   firstName: string;
   lastName: string;
+  nickname: string;
 }
 
 export interface UpdateUserProfileInput {
   firstName?: string;
   lastName?: string;
+  nickname?: string;
 }
 
 export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
 
 export interface UserRepositoryPort {
   findByEmail(email: string): Promise<AuthUserWithPassword | null>;
+  /** Nickname já normalizado (ex. minúsculas); comparação case-insensitive no BD. */
+  findByNickname(nickname: string): Promise<AuthUserWithPassword | null>;
   findById(id: string): Promise<AuthUserWithPassword | null>;
   create(data: CreateUserInput): Promise<AuthUserWithPassword>;
   updateProfile(

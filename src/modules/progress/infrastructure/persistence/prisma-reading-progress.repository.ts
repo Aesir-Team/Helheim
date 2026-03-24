@@ -74,7 +74,6 @@ export class PrismaReadingProgressRepository implements ReadingProgressRepositor
                   where: {
                     deletedAt: null,
                     releaseStatus: 'published',
-                    accessLevel: 'public',
                   },
                 },
               },

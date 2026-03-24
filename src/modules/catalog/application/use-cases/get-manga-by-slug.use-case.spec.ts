@@ -50,6 +50,7 @@ function makeRepo(
       limit: 20,
       totalPages: 0,
     }),
+    listBySlugs: jest.fn().mockResolvedValue([]),
     upsertBySlug: jest.fn().mockResolvedValue({ id: 'm1' }),
     linkCategories: jest.fn().mockResolvedValue(undefined),
     getSyncStatus: jest

@@ -34,6 +34,7 @@ function makeRepo(
     findBySlug: jest.fn().mockResolvedValue(null),
     findByIdForListItem: jest.fn().mockResolvedValue(null),
     list: jest.fn().mockResolvedValue(result),
+    listBySlugs: jest.fn().mockResolvedValue([]),
     upsertBySlug: jest.fn().mockResolvedValue({ id: 'm1' }),
     linkCategories: jest.fn().mockResolvedValue(undefined),
     getSyncStatus: jest.fn().mockResolvedValue(null),

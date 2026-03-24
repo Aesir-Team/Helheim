@@ -4,7 +4,7 @@ import {
   USER_REPOSITORY,
   UserRepositoryPort,
 } from '../ports/user.repository.port';
-import { NotFoundError } from '../../../../shared/domain/errors';
+import { ConflictError, NotFoundError } from '../../../../shared/domain/errors';
 import { AuthUserWithPassword } from '../../domain/entities/user.entity';
 
 describe('UpdateProfileUseCase', () => {
@@ -17,6 +17,7 @@ describe('UpdateProfileUseCase', () => {
     password: 'hashed',
     firstName: 'Test',
     lastName: 'User',
+    nickname: 'testuser',
     role: 'USER',
     coinsBalance: 0,
     createdAt: new Date(),
@@ -27,6 +28,7 @@ describe('UpdateProfileUseCase', () => {
     userRepo = {
       findById: jest.fn().mockResolvedValue(mockUser),
       findByEmail: jest.fn(),
+      findByNickname: jest.fn().mockResolvedValue(null),
       create: jest.fn(),
       updateProfile: jest.fn().mockResolvedValue({
         ...mockUser,
@@ -66,5 +68,29 @@ describe('UpdateProfileUseCase', () => {
     ).rejects.toThrow(NotFoundError);
 
     expect(userRepo.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('deve lançar ConflictError se nickname já pertencer a outro usuário', async () => {
+    userRepo.findByNickname.mockResolvedValue({
+      ...mockUser,
+      id: 'outro-id',
+      nickname: 'taken',
+    });
+
+    await expect(
+      useCase.execute('user-1', { nickname: 'Taken' }),
+    ).rejects.toThrow(ConflictError);
+
+    expect(userRepo.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('deve permitir manter o próprio nickname', async () => {
+    userRepo.findByNickname.mockResolvedValue(mockUser);
+
+    await useCase.execute('user-1', { nickname: 'testuser' });
+
+    expect(userRepo.updateProfile).toHaveBeenCalledWith('user-1', {
+      nickname: 'testuser',
+    });
   });
 });

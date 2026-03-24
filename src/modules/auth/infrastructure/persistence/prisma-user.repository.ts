@@ -19,6 +19,16 @@ export class PrismaUserRepository implements UserRepositoryPort {
     return row ? this.toDomain(row) : null;
   }
 
+  async findByNickname(nickname: string): Promise<AuthUserWithPassword | null> {
+    const row = await this.prisma.user.findFirst({
+      where: {
+        nickname: { equals: nickname, mode: 'insensitive' },
+        deletedAt: null,
+      },
+    });
+    return row ? this.toDomain(row) : null;
+  }
+
   async findById(id: string): Promise<AuthUserWithPassword | null> {
     const row = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
@@ -33,6 +43,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
         password: data.passwordHash,
         firstName: data.firstName,
         lastName: data.lastName,
+        nickname: data.nickname,
         role: Role.USER,
       },
     });
@@ -48,6 +59,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
       data: {
         ...(data.firstName != null && { firstName: data.firstName }),
         ...(data.lastName != null && { lastName: data.lastName }),
+        ...(data.nickname != null && { nickname: data.nickname }),
       },
     });
     return this.toDomain(row);
@@ -59,6 +71,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
     password: string;
     firstName: string;
     lastName: string;
+    nickname: string;
     role: Role;
     coinsBalance: number;
     createdAt: Date;
@@ -70,6 +83,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
       password: row.password,
       firstName: row.firstName,
       lastName: row.lastName,
+      nickname: row.nickname,
       role: row.role as AuthUserWithPassword['role'],
       coinsBalance: row.coinsBalance,
       createdAt: row.createdAt,

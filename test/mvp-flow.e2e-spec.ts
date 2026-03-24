@@ -21,7 +21,12 @@ interface MangaDetailBody {
 }
 
 interface PaginatedChaptersBody {
-  data: { id: string; accessLevel: string; number: string }[];
+  data: {
+    id: string;
+    accessLevel: string;
+    number: string;
+    isLocked: boolean;
+  }[];
 }
 
 interface ChapterReadingBody {
@@ -47,7 +52,7 @@ describe('MVP flow (e2e)', () => {
     await app?.close();
   });
 
-  it('register → GET manga por slug (seed) → list chapters ( só public ) → GET chapter com JWT', async () => {
+  it('register → GET manga por slug (seed) → list chapters (public + coin, ordem natural) → GET chapter public sem JWT e com JWT', async () => {
     const email = `e2e-${Date.now()}@midgard.local`;
     const password = 'senha-e2e-12';
 
@@ -58,6 +63,7 @@ describe('MVP flow (e2e)', () => {
         password,
         firstName: 'E2E',
         lastName: 'User',
+        nickname: `e2e_main_${String(Date.now())}`,
       })
       .expect(201);
 
@@ -86,11 +92,29 @@ describe('MVP flow (e2e)', () => {
       .expect(200);
 
     const chData = (chapters.body as PaginatedChaptersBody).data;
-    expect(chData.length).toBeGreaterThanOrEqual(1);
-    expect(chData.every((c) => c.accessLevel === 'public')).toBe(true);
-    expect(chData.some((c) => c.number.includes('coin'))).toBe(false);
+    expect(chData.length).toBeGreaterThanOrEqual(2);
+    expect(chData.some((c) => c.accessLevel === 'public')).toBe(true);
+    expect(chData.some((c) => c.accessLevel === 'coin')).toBe(true);
+    expect(chData.some((c) => c.isLocked === true)).toBe(true);
 
-    const chapterId = chData[0].id;
+    const nums = chData.map((c) => c.number);
+    const sorted = [...nums].sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
+    );
+    expect(nums).toEqual(sorted);
+
+    const publicChapter = chData.find((c) => c.accessLevel === 'public');
+    expect(publicChapter).toBeDefined();
+    const chapterId = publicChapter!.id;
+
+    const readGuest = await request(app.getHttpServer())
+      .get(`/api/v1/chapters/${chapterId}`)
+      .expect(200);
+    const readGuestBody = readGuest.body as ChapterReadingBody;
+    expect(readGuestBody.id).toBe(chapterId);
+    expect(Array.isArray(readGuestBody.pages)).toBe(true);
+    expect(readGuestBody.pages.length).toBeGreaterThanOrEqual(1);
+
     const read = await request(app.getHttpServer())
       .get(`/api/v1/chapters/${chapterId}`)
       .set('Authorization', `Bearer ${token}`)
@@ -100,6 +124,16 @@ describe('MVP flow (e2e)', () => {
     expect(readBody.id).toBe(chapterId);
     expect(Array.isArray(readBody.pages)).toBe(true);
     expect(readBody.pages.length).toBeGreaterThanOrEqual(1);
+
+    const coinChapter = chData.find((c) => c.accessLevel === 'coin');
+    expect(coinChapter).toBeDefined();
+    const coinRead = await request(app.getHttpServer())
+      .get(`/api/v1/chapters/${coinChapter!.id}`)
+      .expect(403);
+    expect(coinRead.body).toMatchObject({
+      statusCode: 403,
+      reason: 'authentication_required',
+    });
   });
 
   it('login retorna token para usuário existente', async () => {
@@ -113,6 +147,7 @@ describe('MVP flow (e2e)', () => {
         password,
         firstName: 'L',
         lastName: 'G',
+        nickname: `e2e_login_${String(Date.now())}`,
       })
       .expect(201);
 

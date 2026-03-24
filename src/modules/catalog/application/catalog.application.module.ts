@@ -13,8 +13,11 @@ import { PrismaChapterRepository } from '../infrastructure/persistence/prisma-ch
 import { PrismaCategoryRepository } from '../infrastructure/persistence/prisma-category.repository';
 
 import { ListMangasUseCase } from './use-cases/list-mangas.use-case';
+import { GetHomeFeedUseCase } from './use-cases/get-home-feed.use-case';
+import { GetMangaSyncStatusUseCase } from './use-cases/get-manga-sync-status.use-case';
 import { GetMangaBySlugUseCase } from './use-cases/get-manga-by-slug.use-case';
 import { ListChaptersUseCase } from './use-cases/list-chapters.use-case';
+import { GetChapterSummaryByMangaSlugAndNumberUseCase } from './use-cases/get-chapter-summary-by-manga-slug-and-number.use-case';
 import { ListCategoriesUseCase } from './use-cases/list-categories.use-case';
 import { SyncMangaFromSourceUseCase } from './use-cases/sync-manga-from-source.use-case';
 import { GetChapterForReadingUseCase } from './use-cases/get-chapter-for-reading.use-case';
@@ -30,9 +33,12 @@ import { GetChapterForReadingUseCase } from './use-cases/get-chapter-for-reading
     { provide: MANGA_REPOSITORY, useClass: PrismaMangaRepository },
     { provide: CHAPTER_REPOSITORY, useClass: PrismaChapterRepository },
     { provide: CATEGORY_REPOSITORY, useClass: PrismaCategoryRepository },
+    GetHomeFeedUseCase,
+    GetMangaSyncStatusUseCase,
     ListMangasUseCase,
     GetMangaBySlugUseCase,
     ListChaptersUseCase,
+    GetChapterSummaryByMangaSlugAndNumberUseCase,
     ListCategoriesUseCase,
     SyncMangaFromSourceUseCase,
     GetChapterForReadingUseCase,
@@ -40,9 +46,12 @@ import { GetChapterForReadingUseCase } from './use-cases/get-chapter-for-reading
   exports: [
     MANGA_REPOSITORY,
     CHAPTER_REPOSITORY,
+    GetHomeFeedUseCase,
+    GetMangaSyncStatusUseCase,
     ListMangasUseCase,
     GetMangaBySlugUseCase,
     ListChaptersUseCase,
+    GetChapterSummaryByMangaSlugAndNumberUseCase,
     ListCategoriesUseCase,
     SyncMangaFromSourceUseCase,
     GetChapterForReadingUseCase,

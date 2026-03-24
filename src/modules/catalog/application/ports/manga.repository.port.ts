@@ -93,6 +93,10 @@ export interface MangaRepositoryPort {
   /** Mangá não soft-deleted; usado para validar add em lista (PRODUTO §3.5). */
   findByIdForListItem(mangaId: string): Promise<MangaForListItemDto | null>;
   list(params: ListMangasParams): Promise<PaginatedResult<MangaSummaryDto>>;
+  listBySlugs(
+    slugs: string[],
+    includeNsfw?: boolean,
+  ): Promise<MangaSummaryDto[]>;
   upsertBySlug(data: UpsertMangaInput): Promise<{ id: string }>;
   /** Upsert categorias e vincula ao mangá (substituindo links anteriores). */
   linkCategories(

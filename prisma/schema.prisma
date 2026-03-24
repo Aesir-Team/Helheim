@@ -26,6 +26,8 @@ model User {
   password   String
   firstName  String
   lastName   String
+  /// Apelido público único (comparação case-insensitive na API; persistido em minúsculas).
+  nickname   String   @unique
   role       Role     @default(USER)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

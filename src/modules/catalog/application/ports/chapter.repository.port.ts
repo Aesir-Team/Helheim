@@ -6,6 +6,7 @@ export interface ChapterSummaryDto {
   number: string;
   title: string | null;
   accessLevel: string;
+  isLocked: boolean;
   coinCost: number;
   createdAt: Date;
 }
@@ -37,6 +38,17 @@ export type ChapterNeighborIds = {
   nextChapterId: string | null;
 };
 
+export interface ApplyFreeTierAccessParams {
+  freeFraction: number;
+  /** `coinCost` aplicado aos capítulos que saem de `public` (MVP). */
+  coinChapterCost: number;
+}
+
+export interface ApplyFreeTierAccessResult {
+  publicCount: number;
+  coinCount: number;
+}
+
 export interface ChapterRepositoryPort {
   findExistingNumbersByMangaId(
     mangaId: string,
@@ -48,6 +60,17 @@ export interface ChapterRepositoryPort {
     options: { order: 'asc' | 'desc'; page: number; limit: number },
   ): Promise<{ data: ChapterSummaryDto[]; total: number }>;
 
+  /**
+   * Capítulos publicados a partir do número informado (inclusive), em ordem **asc** natural por `number`,
+   * com paginação sobre esse subconjunto (deep link + scroll).
+   * Retorna `null` se o mangá não existir ou não houver capítulo publicado com esse `number`.
+   */
+  listPublishedSummariesFromMangaSlugFromNumberAsc(
+    mangaSlug: string,
+    fromNumber: string,
+    options: { page: number; limit: number },
+  ): Promise<{ data: ChapterSummaryDto[]; total: number } | null>;
+
   findById(id: string): Promise<ChapterDetailDto | null>;
 
   /**
@@ -57,4 +80,13 @@ export interface ChapterRepositoryPort {
   findNeighborChapterIds(chapterId: string): Promise<ChapterNeighborIds>;
 
   upsertByMangaAndNumber(data: UpsertChapterInput): Promise<{ id: string }>;
+
+  /**
+   * Recalcula `accessLevel` / `coinCost` para todos os capítulos publicados do mangá:
+   * os primeiros (por `number` ascendente) ficam `public`, o restante `coin`.
+   */
+  applyFreeTierAccessForManga(
+    mangaId: string,
+    params: ApplyFreeTierAccessParams,
+  ): Promise<ApplyFreeTierAccessResult>;
 }

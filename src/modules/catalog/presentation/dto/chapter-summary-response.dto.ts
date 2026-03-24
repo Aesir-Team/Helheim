@@ -13,6 +13,13 @@ export class ChapterSummaryResponseDto {
   @ApiProperty({ example: 'public', enum: ['public', 'coin'] })
   accessLevel!: string;
 
+  @ApiProperty({
+    example: false,
+    description:
+      'Se true, capítulo está bloqueado para leitura direta e exige unlock por coin.',
+  })
+  isLocked!: boolean;
+
   @ApiProperty({ example: 0 })
   coinCost!: number;
 

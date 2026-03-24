@@ -6,7 +6,11 @@ import type {
   ChapterSummaryDto,
   ChapterDetailDto,
   UpsertChapterInput,
+  ApplyFreeTierAccessParams,
+  ApplyFreeTierAccessResult,
 } from '../../application/ports/chapter.repository.port';
+import { applyMangaChapterFreeTier } from '../../../../shared/infrastructure/prisma/apply-manga-chapter-free-tier';
+import { compareChapterNumberAsc } from '../../../../shared/domain/chapter-free-tier.policy';
 
 @Injectable()
 export class PrismaChapterRepository implements ChapterRepositoryPort {
@@ -41,32 +45,116 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
 
     if (!manga) return { data: [], total: 0 };
 
-    /** MVP (PLANO G.4): listagem só expõe capítulos `public`; `coin` segue oculto até módulo Coins. */
+    /** Lista todos os publicados; frontend usa isLocked/accessLevel para UX de bloqueio. */
     const where = {
       mangaId: manga.id,
       deletedAt: null,
       releaseStatus: 'published' as const,
-      accessLevel: 'public' as const,
     };
 
     const skip = (options.page - 1) * options.limit;
 
-    const [rows, total] = await this.prisma.$transaction([
+    const [lightRows, total] = await this.prisma.$transaction([
       this.prisma.chapter.findMany({
         where,
-        orderBy: { number: options.order },
-        skip,
-        take: options.limit,
+        select: { id: true, number: true },
       }),
       this.prisma.chapter.count({ where }),
     ]);
 
-    const data: ChapterSummaryDto[] = rows.map((row) => ({
+    const cmp =
+      options.order === 'asc'
+        ? compareChapterNumberAsc
+        : (a: string, b: string) => compareChapterNumberAsc(b, a);
+
+    const sortedIds = [...lightRows]
+      .sort((a, b) => cmp(a.number, b.number))
+      .map((r) => r.id);
+    const pageIds = sortedIds.slice(skip, skip + options.limit);
+
+    const rows =
+      pageIds.length === 0
+        ? []
+        : await this.prisma.chapter.findMany({
+            where: { id: { in: pageIds } },
+          });
+
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const orderedRows = pageIds
+      .map((id) => byId.get(id))
+      .filter((row): row is NonNullable<typeof row> => row !== undefined);
+
+    const data: ChapterSummaryDto[] = orderedRows.map((row) => ({
       id: row.id,
       mangaId: row.mangaId,
       number: row.number,
       title: row.title,
       accessLevel: row.accessLevel,
+      isLocked: row.accessLevel === 'coin',
+      coinCost: row.coinCost,
+      createdAt: row.createdAt,
+    }));
+
+    return { data, total };
+  }
+
+  async listPublishedSummariesFromMangaSlugFromNumberAsc(
+    mangaSlug: string,
+    fromNumber: string,
+    options: { page: number; limit: number },
+  ): Promise<{ data: ChapterSummaryDto[]; total: number } | null> {
+    const manga = await this.prisma.manga.findFirst({
+      where: { slug: mangaSlug, deletedAt: null },
+      select: { id: true },
+    });
+    if (!manga) {
+      return null;
+    }
+
+    const where = {
+      mangaId: manga.id,
+      deletedAt: null,
+      releaseStatus: 'published' as const,
+    };
+
+    const lightRows = await this.prisma.chapter.findMany({
+      where,
+      select: { id: true, number: true },
+    });
+
+    const sorted = [...lightRows].sort((a, b) =>
+      compareChapterNumberAsc(a.number, b.number),
+    );
+    const startIdx = sorted.findIndex((r) => r.number === fromNumber);
+    if (startIdx === -1) {
+      return null;
+    }
+
+    const forward = sorted.slice(startIdx);
+    const total = forward.length;
+    const skip = (options.page - 1) * options.limit;
+    const pageSlice = forward.slice(skip, skip + options.limit);
+    const pageIds = pageSlice.map((r) => r.id);
+
+    const rows =
+      pageIds.length === 0
+        ? []
+        : await this.prisma.chapter.findMany({
+            where: { id: { in: pageIds } },
+          });
+
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const orderedRows = pageIds
+      .map((id) => byId.get(id))
+      .filter((row): row is NonNullable<typeof row> => row !== undefined);
+
+    const data: ChapterSummaryDto[] = orderedRows.map((row) => ({
+      id: row.id,
+      mangaId: row.mangaId,
+      number: row.number,
+      title: row.title,
+      accessLevel: row.accessLevel,
+      isLocked: row.accessLevel === 'coin',
       coinCost: row.coinCost,
       createdAt: row.createdAt,
     }));
@@ -91,6 +179,7 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
       number: row.number,
       title: row.title,
       accessLevel: row.accessLevel,
+      isLocked: row.accessLevel === 'coin',
       coinCost: row.coinCost,
       views: row.views,
       createdAt: row.createdAt,
@@ -120,17 +209,20 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
         deletedAt: null,
         releaseStatus: 'published',
       },
-      select: { id: true },
-      orderBy: { number: 'asc' },
+      select: { id: true, number: true },
     });
 
-    const idx = siblings.findIndex((s) => s.id === chapterId);
+    const sorted = [...siblings].sort((a, b) =>
+      compareChapterNumberAsc(a.number, b.number),
+    );
+
+    const idx = sorted.findIndex((s) => s.id === chapterId);
     if (idx === -1) {
       return { prevChapterId: null, nextChapterId: null };
     }
 
-    const prev = idx > 0 ? siblings[idx - 1] : undefined;
-    const next = idx < siblings.length - 1 ? siblings[idx + 1] : undefined;
+    const prev = idx > 0 ? sorted[idx - 1] : undefined;
+    const next = idx < sorted.length - 1 ? sorted[idx + 1] : undefined;
 
     return {
       prevChapterId: prev?.id ?? null,
@@ -179,5 +271,12 @@ export class PrismaChapterRepository implements ChapterRepositoryPort {
     }
 
     return { id: row.id };
+  }
+
+  async applyFreeTierAccessForManga(
+    mangaId: string,
+    params: ApplyFreeTierAccessParams,
+  ): Promise<ApplyFreeTierAccessResult> {
+    return applyMangaChapterFreeTier(this.prisma, mangaId, params);
   }
 }

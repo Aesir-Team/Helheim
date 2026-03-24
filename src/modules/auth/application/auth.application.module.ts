@@ -14,6 +14,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AccessApplicationModule } from '../../access/application/access.application.module';
 import { JwtAuthGuard } from '../presentation/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../presentation/guards/optional-jwt-auth.guard';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { JwtAuthGuard } from '../presentation/guards/jwt-auth.guard';
   ],
   providers: [
     JwtAuthGuard,
+    OptionalJwtAuthGuard,
     RegisterUserUseCase,
     LoginUseCase,
     GetProfileUseCase,
@@ -41,6 +43,7 @@ import { JwtAuthGuard } from '../presentation/guards/jwt-auth.guard';
   exports: [
     JwtModule,
     JwtAuthGuard,
+    OptionalJwtAuthGuard,
     RegisterUserUseCase,
     LoginUseCase,
     GetProfileUseCase,

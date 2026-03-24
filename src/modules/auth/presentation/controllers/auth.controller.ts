@@ -47,7 +47,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Registrar usuário',
     description:
-      'Cria uma nova conta. Retorna o perfil e um JWT para autenticação.',
+      'Cria uma nova conta (email, senha, nome, sobrenome e **nickname** único). Retorna o perfil e um JWT.',
   })
   @ApiResponse({
     status: 201,
@@ -61,7 +61,7 @@ export class AuthController {
   })
   @ApiResponse({
     status: 409,
-    description: 'Email já cadastrado',
+    description: 'Email ou nickname já cadastrado',
     type: ErrorResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)
@@ -72,6 +72,7 @@ export class AuthController {
         password: dto.password,
         firstName: dto.firstName,
         lastName: dto.lastName,
+        nickname: dto.nickname,
       });
     } catch (e) {
       if (e instanceof ConflictError) {
@@ -143,7 +144,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Atualizar perfil',
     description:
-      'Atualiza nome e sobrenome do usuário autenticado (requer JWT).',
+      'Atualiza nome, sobrenome e/ou nickname do usuário autenticado (requer JWT). Nickname continua único.',
   })
   @ApiResponse({
     status: 200,
@@ -160,13 +161,26 @@ export class AuthController {
     description: 'Token ausente ou inválido',
     type: ErrorResponseDto,
   })
+  @ApiResponse({
+    status: 409,
+    description: 'Nickname já em uso',
+    type: ErrorResponseDto,
+  })
   async updateMe(
     @Request() req: AuthenticatedRequest,
     @Body() dto: UpdateProfileDto,
   ) {
-    return this.updateProfile.execute(req.user.userId, {
-      ...(dto.firstName != null && { firstName: dto.firstName }),
-      ...(dto.lastName != null && { lastName: dto.lastName }),
-    });
+    try {
+      return await this.updateProfile.execute(req.user.userId, {
+        ...(dto.firstName != null && { firstName: dto.firstName }),
+        ...(dto.lastName != null && { lastName: dto.lastName }),
+        ...(dto.nickname != null && { nickname: dto.nickname }),
+      });
+    } catch (e) {
+      if (e instanceof ConflictError) {
+        throw new ConflictException((e as Error).message);
+      }
+      throw e;
+    }
   }
 }

@@ -4,7 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 export const MVP_DEMO_MANGA_SLUG = 'seed-mvp-demo';
 
 /**
- * Idempotente: plano gratuito + mangá demo + cap. public + cap. coin (G.4).
+ * Idempotente: plano gratuito + mangá demo + cap. public + cap. coin (G.4; coin visível na listagem com isLocked).
  * Usado por `prisma/seed.ts` e por E2E (`test/mvp-flow.e2e-spec.ts`).
  */
 export async function ensureMvpFixtures(prisma: PrismaClient): Promise<void> {
@@ -89,7 +89,7 @@ export async function ensureMvpFixtures(prisma: PrismaClient): Promise<void> {
     create: {
       mangaId: manga.id,
       number: '99-coin',
-      title: 'Capítulo premium (coin, oculto na listagem MVP)',
+      title: 'Capítulo premium (coin, bloqueado na UI)',
       releaseStatus: 'published',
       accessLevel: 'coin',
       coinCost: 10,

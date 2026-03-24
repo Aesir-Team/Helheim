@@ -8,7 +8,7 @@ export class ChapterPageItemResponseDto {
   imageUrl!: string;
 }
 
-/** Resposta de GET /chapters/:id (Fase C — sem cota; Fase D adiciona regras de acesso). */
+/** Resposta de GET /chapters/:id — `public` sem JWT (visitante); com JWT aplica cota e progresso. */
 export class ChapterForReadingResponseDto {
   @ApiProperty()
   id!: string;

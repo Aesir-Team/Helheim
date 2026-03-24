@@ -66,9 +66,13 @@ function makeChapterRepo(
   return {
     findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
     listByMangaSlug: jest.fn(),
+    listPublishedSummariesFromMangaSlugFromNumberAsc: jest.fn(),
     findById: jest.fn().mockResolvedValue(CHAPTER),
     findNeighborChapterIds: jest.fn(),
     upsertByMangaAndNumber: jest.fn(),
+    applyFreeTierAccessForManga: jest
+      .fn()
+      .mockResolvedValue({ publicCount: 0, coinCount: 0 }),
     ...overrides,
   };
 }

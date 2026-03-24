@@ -23,4 +23,5 @@ export interface MangaSyncProgressState {
 
 export interface MangaSyncProgressPort {
   publish(state: MangaSyncProgressState): Promise<void>;
+  getLatestBySlug(slug: string): Promise<MangaSyncProgressState | null>;
 }

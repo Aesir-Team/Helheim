@@ -13,8 +13,11 @@ Referência **expandida** (parâmetros, erros, auth, checklist): [`API-MVP-DETAL
 
 ## Decisão G.4 — capítulos `accessLevel = coin`
 
-- **Listagem** (`GET /mangas/:slug/chapters`) e **preview no detalhe do mangá** (`chaptersCount`, `latestChapters`): apenas capítulos **`public`**. Capítulos **`coin`** ficam **ocultos** até o módulo Coins.
-- **Leitura** (`GET /chapters/:id` com JWT): capítulo **`coin`** → **403** com `reason: coin_chapter_not_available` (ver `ChapterAccessForbiddenResponseDto`).
+- **Listagem** (`GET /mangas/:slug/chapters`): capítulos **publicados** (`public` e `coin`) em **paginação** (`page`, `limit` — default `page=1`, `limit=50`, máx. `200`), ordenação natural por `number` (`order` `asc`|`desc`); `isLocked` indica coin na UI.
+- **A partir de um número** (`GET /mangas/:slug/chapters/by-number/:number`): encontra o capítulo **publicado** com aquele `number` e devolve **`data` em ordem asc** a partir dele (inclusive), **paginado** (`page`, `limit`, mesmos defaults/máx. da listagem); leitura com páginas em `GET /chapters/:id` (UUID).
+- **Preview no detalhe do mangá** (`chaptersCount`, `latestChapters`): apenas os **últimos** capítulos publicados no payload (não substitui a listagem paginada).
+- **Faixa grátis (~10% por padrão):** ao fim de cada sync e via `npm run db:apply-free-tier`, os primeiros capítulos (por ordem de `number`) ficam **`public`**; o restante **`coin`** (`MANGA_FREE_CHAPTER_FRACTION`, `MANGA_COIN_CHAPTER_COST` no `.env`).
+- **Leitura** (`GET /chapters/:id`): capítulo **`public`** pode ser lido **sem JWT** (sem cota/progresso). Capítulo **`coin`** sem JWT → **403** `authentication_required`; com JWT → **403** `coin_chapter_not_available` no MVP (ver `ChapterAccessForbiddenResponseDto`).
 
 ---
 
@@ -29,11 +32,13 @@ Referência **expandida** (parâmetros, erros, auth, checklist): [`API-MVP-DETAL
 | POST | `/auth/login` | N | Login + JWT |
 | GET | `/auth/me` | JWT | Perfil |
 | PATCH | `/auth/me` | JWT | Atualizar nome |
+| GET | `/home` | N | Home agregada (`trending`, `recommended`, `latestUpdates`) |
 | GET | `/mangas` | N | Listar mangás (paginação/filtros) |
 | GET | `/mangas/:slug` | N | Detalhe (sync se ausente no BD) |
-| GET | `/mangas/:slug/chapters` | N | Capítulos **public** publicados |
+| GET | `/mangas/:slug/chapters` | N | Capítulos publicados, **paginado** (`page`, `limit`, `order`) |
+| GET | `/mangas/:slug/chapters/by-number/:number` | N | Lista **asc** a partir do `number` (deep link), paginada (`?page=&limit=`) |
 | GET | `/categories` | N | Categorias |
-| GET | `/chapters/:id` | **JWT** | Leitura (cota semanal / coin bloqueado MVP) |
+| GET | `/chapters/:id` | Opcional | `public` sem JWT OK; JWT para cota/progresso; `coin` exige JWT |
 | GET | `/users/me/lists` | JWT | Listas do usuário |
 | POST | `/users/me/lists` | JWT | Criar lista |
 | PATCH | `/users/me/lists/reorder` | JWT | Reordenar listas |

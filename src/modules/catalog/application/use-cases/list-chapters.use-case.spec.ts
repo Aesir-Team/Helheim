@@ -10,6 +10,7 @@ const CHAPTER_STUB: ChapterSummaryDto = {
   number: '1',
   title: 'Chapter 1',
   accessLevel: 'public',
+  isLocked: false,
   coinCost: 0,
   createdAt: new Date('2026-01-01'),
 };
@@ -18,27 +19,34 @@ function makeRepo(
   overrides?: Partial<ChapterRepositoryPort>,
 ): ChapterRepositoryPort {
   return {
+    findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
     listByMangaSlug: jest
       .fn()
       .mockResolvedValue({ data: [CHAPTER_STUB], total: 1 }),
+    listPublishedSummariesFromMangaSlugFromNumberAsc: jest
+      .fn()
+      .mockResolvedValue(null),
     findById: jest.fn().mockResolvedValue(null),
     findNeighborChapterIds: jest
       .fn()
       .mockResolvedValue({ prevChapterId: null, nextChapterId: null }),
     upsertByMangaAndNumber: jest.fn().mockResolvedValue({ id: 'ch-1' }),
+    applyFreeTierAccessForManga: jest
+      .fn()
+      .mockResolvedValue({ publicCount: 0, coinCount: 0 }),
     ...overrides,
   };
 }
 
 describe('ListChaptersUseCase', () => {
-  it('should list chapters with defaults (desc, page 1, limit 50)', async () => {
+  it('should list chapters with defaults (asc, page 1, limit 50)', async () => {
     const repo = makeRepo();
     const sut = new ListChaptersUseCase(repo);
 
     const result = await sut.execute({ mangaSlug: 'solo-leveling' });
 
     expect(repo.listByMangaSlug).toHaveBeenCalledWith('solo-leveling', {
-      order: 'desc',
+      order: 'asc',
       page: 1,
       limit: 50,
     });
@@ -52,7 +60,7 @@ describe('ListChaptersUseCase', () => {
     await sut.execute({ mangaSlug: 'test', limit: 999 });
 
     expect(repo.listByMangaSlug).toHaveBeenCalledWith('test', {
-      order: 'desc',
+      order: 'asc',
       page: 1,
       limit: 200,
     });

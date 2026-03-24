@@ -18,6 +18,7 @@ function makeRepo(
       limit: 20,
       totalPages: 0,
     }),
+    listBySlugs: jest.fn().mockResolvedValue([]),
     upsertBySlug: jest.fn().mockResolvedValue({ id: 'm1' }),
     linkCategories: jest.fn().mockResolvedValue(undefined),
     getSyncStatus: jest
@@ -34,11 +35,17 @@ function makeChapterRepo(
   return {
     findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
     listByMangaSlug: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+    listPublishedSummariesFromMangaSlugFromNumberAsc: jest
+      .fn()
+      .mockResolvedValue(null),
     findById: jest.fn().mockResolvedValue(null),
     findNeighborChapterIds: jest
       .fn()
       .mockResolvedValue({ prevChapterId: null, nextChapterId: null }),
     upsertByMangaAndNumber: jest.fn().mockResolvedValue({ id: 'ch-1' }),
+    applyFreeTierAccessForManga: jest
+      .fn()
+      .mockResolvedValue({ publicCount: 0, coinCount: 0 }),
     ...overrides,
   };
 }
@@ -56,7 +63,10 @@ function makeGateway(
 }
 
 function makeProgress(): MangaSyncProgressPort {
-  return { publish: jest.fn().mockResolvedValue(undefined) };
+  return {
+    publish: jest.fn().mockResolvedValue(undefined),
+    getLatestBySlug: jest.fn().mockResolvedValue(null),
+  };
 }
 
 function makeConfig(
@@ -167,6 +177,10 @@ describe('SyncMangaFromSourceUseCase', () => {
     expect(gateway.getChapterById).toHaveBeenCalledTimes(2);
     expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 2 });
+    expect(chapterRepo.applyFreeTierAccessForManga).toHaveBeenCalledWith('m1', {
+      freeFraction: 0.1,
+      coinChapterCost: 1,
+    });
     expect(progress.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'completed',
@@ -213,10 +227,15 @@ describe('SyncMangaFromSourceUseCase', () => {
       expect.objectContaining({ number: '2' }),
     );
     expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 1 });
+    expect(chapterRepo.applyFreeTierAccessForManga).toHaveBeenCalledWith('m1', {
+      freeFraction: 0.1,
+      coinChapterCost: 1,
+    });
   });
 
   it('Given deadline 0, should timeout before getChapterById and publish timeout state', async () => {
     const repo = makeRepo();
+    const chapterRepo = makeChapterRepo();
     const gateway = makeGateway({
       getMangaBySlug: jest.fn().mockResolvedValue({
         id: 'ext-1',
@@ -230,7 +249,7 @@ describe('SyncMangaFromSourceUseCase', () => {
     const progress = makeProgress();
     const sut = makeSut(
       repo,
-      makeChapterRepo(),
+      chapterRepo,
       gateway,
       progress,
       makeConfig({
@@ -242,6 +261,10 @@ describe('SyncMangaFromSourceUseCase', () => {
     const result = await sut.execute('slow');
 
     expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 0 });
+    expect(chapterRepo.applyFreeTierAccessForManga).toHaveBeenCalledWith('m1', {
+      freeFraction: 0.1,
+      coinChapterCost: 1,
+    });
     expect(gateway.getChapterById).not.toHaveBeenCalled();
     expect(progress.publish).toHaveBeenCalledWith(
       expect.objectContaining({

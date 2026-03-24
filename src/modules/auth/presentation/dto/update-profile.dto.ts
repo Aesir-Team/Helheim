@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MaxLength, IsOptional } from 'class-validator';
+import { IsString, MaxLength, MinLength, IsOptional } from 'class-validator';
 
 export class UpdateProfileDto {
   @ApiProperty({ example: 'João', maxLength: 100, required: false })
@@ -13,4 +13,18 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(100)
   lastName?: string;
+
+  @ApiProperty({
+    example: 'novo_nick',
+    minLength: 2,
+    maxLength: 100,
+    required: false,
+    description:
+      'Novo apelido (único; trim + minúsculas na persistência). Omitir para não alterar.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  nickname?: string;
 }

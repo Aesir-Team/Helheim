@@ -13,6 +13,12 @@ export class AuthUserResponseDto {
   @ApiProperty({ example: 'Silva' })
   lastName!: string;
 
+  @ApiProperty({
+    example: 'leitor_manga',
+    description: 'Apelido único (armazenado em minúsculas).',
+  })
+  nickname!: string;
+
   @ApiProperty({ enum: ['ADMIN', 'MODERATOR', 'VIP', 'USER'] })
   role!: string;
 

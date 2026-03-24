@@ -22,6 +22,10 @@ import {
   normalizeMangaTypeFromExternal,
   type CanonicalMangaType,
 } from '../../../../shared/domain/manga-external.normalization';
+import {
+  parseCoinChapterCost,
+  parseFreeChapterFraction,
+} from '../../../../shared/domain/chapter-free-tier.policy';
 
 export interface SyncResult {
   mangaId: string;
@@ -193,6 +197,7 @@ export class SyncMangaFromSourceUseCase {
             'error',
             'manga_sync_deadline_exceeded',
           );
+          await this.applyFreeTierForMangaSafe(mangaId);
           return { mangaId, chaptersUpserted };
         }
 
@@ -250,6 +255,7 @@ export class SyncMangaFromSourceUseCase {
         updatedAt: doneIso,
       });
 
+      await this.applyFreeTierForMangaSafe(mangaId);
       await this.mangaRepo.setSyncStatus(slug, 'idle');
       return { mangaId, chaptersUpserted };
     } catch (err) {
@@ -270,6 +276,29 @@ export class SyncMangaFromSourceUseCase {
       });
       await this.mangaRepo.setSyncStatus(slug, 'error', message);
       return null;
+    }
+  }
+
+  private async applyFreeTierForMangaSafe(mangaId: string): Promise<void> {
+    const freeFraction = parseFreeChapterFraction(
+      this.config.get<string | number>('MANGA_FREE_CHAPTER_FRACTION'),
+    );
+    const coinChapterCost = parseCoinChapterCost(
+      this.config.get<string | number>('MANGA_COIN_CHAPTER_COST'),
+    );
+    try {
+      const r = await this.chapterRepo.applyFreeTierAccessForManga(mangaId, {
+        freeFraction,
+        coinChapterCost,
+      });
+      this.logger.debug(
+        `Free tier applied mangaId=${mangaId} public=${r.publicCount} coin=${r.coinCount} fraction=${freeFraction}`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `applyFreeTierAccessForManga failed mangaId=${mangaId}: ${message}`,
+      );
     }
   }
 

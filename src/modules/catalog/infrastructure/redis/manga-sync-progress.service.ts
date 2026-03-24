@@ -50,4 +50,29 @@ export class MangaSyncProgressService
       this.logger.warn(`Redis publish falhou (${key}): ${message}`);
     }
   }
+
+  async getLatestBySlug(slug: string): Promise<MangaSyncProgressState | null> {
+    if (!this.client) {
+      return null;
+    }
+    const types = ['manga', 'manhwa', 'manhua'] as const;
+    for (const mangaType of types) {
+      const key = `${KEY_PREFIX}:${mangaType}:${slug}`;
+      try {
+        const raw = await this.client.get(key);
+        if (!raw) {
+          continue;
+        }
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed !== 'object' || parsed === null) {
+          continue;
+        }
+        return parsed as MangaSyncProgressState;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Redis read falhou (${key}): ${message}`);
+      }
+    }
+    return null;
+  }
 }

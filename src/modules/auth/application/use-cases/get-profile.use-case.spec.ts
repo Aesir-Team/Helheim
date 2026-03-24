@@ -17,6 +17,7 @@ describe('GetProfileUseCase', () => {
     password: 'hashed',
     firstName: 'Test',
     lastName: 'User',
+    nickname: 'testuser',
     role: 'USER',
     coinsBalance: 0,
     createdAt: new Date(),
@@ -27,6 +28,7 @@ describe('GetProfileUseCase', () => {
     userRepo = {
       findById: jest.fn().mockResolvedValue(mockUser),
       findByEmail: jest.fn(),
+      findByNickname: jest.fn(),
       create: jest.fn(),
       updateProfile: jest.fn(),
     };

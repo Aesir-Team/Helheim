@@ -19,6 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:seed": "prisma db seed",
+    "db:apply-free-tier": "tsx scripts/apply-chapter-free-tier-all-mangas.ts",
     "smoke:sync": "tsx scripts/smoke-sync-catalog.ts",
     "scrape": "tsx scripts/scrape-nexustoons.ts",
     "scrape:quick": "SCRAPE_LIMIT=10 SCRAPE_MAX_CHAPTERS=3 tsx scripts/scrape-nexustoons.ts",

@@ -66,7 +66,7 @@ O filtro global **`DomainExceptionFilter`** mapeia erros de domínio para 401/40
 | | |
 |--|--|
 | **Auth** | Não |
-| **Body** | `email` (email), `password` (string, mín. 6), `firstName`, `lastName` (strings, máx. 100) |
+| **Body** | `email` (email), `password` (string, mín. 6), `firstName`, `lastName` (strings, máx. 100), `nickname` (string, 2–100 caracteres, **único**; persistido em minúsculas) |
 | **201** | `{ user, token }` — perfil sem senha + JWT |
 | **409** | Email já cadastrado |
 
@@ -93,12 +93,25 @@ Efeito colateral: cria **`Subscription`** no plano `gratuito` quando o plano exi
 | | |
 |--|--|
 | **Auth** | JWT |
-| **Body** | Opcional: `firstName`, `lastName` (pelo menos um costuma ser enviado para atualizar) |
+| **Body** | Opcional: `firstName`, `lastName`, `nickname` (2–100; **único**; pelo menos um campo costuma ser enviado) |
 | **200** | Perfil atualizado |
 
 ---
 
 ## 6. Catálogo (`/api/v1`)
+
+### `GET /api/v1/home`
+
+| | |
+|--|--|
+| **Auth** | Não |
+| **Query** | `limit` (default 10, máx. 24), `includeNsfw` (`true` para incluir NSFW) |
+| **200** | `{ trending, recommended, latestUpdates }` (3 listas de `MangaSummary`) |
+
+Lógica da home:
+- **`trending`**: consulta `GET /api/mangas/trending` da Nexustoons, faz **upsert** local e responde na mesma ordem pelo banco (fallback local por `views` se externo falhar).
+- **`recommended`**: catálogo local ordenado por **`rating`**, excluindo slugs já usados em `trending`.
+- **`latestUpdates`**: catálogo local ordenado por **`lastChapterAt`**.
 
 ### `GET /api/v1/mangas`
 
@@ -129,8 +142,20 @@ Após responder **200**, dispara em **background** (`SyncMangaFromSourceUseCase`
 | | |
 |--|--|
 | **Auth** | Não |
-| **Query** | `order` (`asc` \| `desc`, default tratado no use case), `page`, `limit` (limit máx. 200 no use case) |
-| **200** | Lista paginada de capítulos **publicados** e com **`accessLevel: public`** apenas (ver §8) |
+| **Query** | `order` (`asc` \| `desc`, default **`asc`** — cap. 1, 2, 3…), `page` (default **1**), `limit` (default **50**, máx. **200**) |
+| **200** | Lista **paginada** de capítulos **publicados** (`public` e `coin`); campo `isLocked` indica bloqueio na UI. Ordenação por `number` em **ordem natural** (ex.: 1, 2, 10 — não lexicográfica). |
+
+### `GET /api/v1/mangas/:slug/chapters/by-number/:number`
+
+| | |
+|--|--|
+| **Auth** | Não |
+| **Path** | `number` = valor do campo `number` do capítulo no BD (ex.: `1`, `12.5`) — **igualdade exata** |
+| **Query** | `page` (default **1**), `limit` (default **50**, máx. **200**) — paginação sobre o subconjunto **a partir desse capítulo (inclusive), ordem asc natural** |
+| **200** | Mesmo formato de `GET .../mangas/:slug/chapters`: `{ data, total, page, limit }`. `data` está sempre em **ordem ascendente** por `number`; `total` = quantidade de capítulos publicados **desse número até o fim** do mangá |
+| **404** | Mangá inexistente, capítulo inexistente, não publicado ou soft-deleted |
+
+Para obter **páginas** de leitura e prev/next, use o `id` de cada item em `GET /api/v1/chapters/:id`.
 
 ### `GET /api/v1/categories`
 
@@ -147,22 +172,26 @@ Após responder **200**, dispara em **background** (`SyncMangaFromSourceUseCase`
 
 | | |
 |--|--|
-| **Auth** | **JWT obrigatório** |
+| **Auth** | **Opcional** — capítulos **`public`** (faixa grátis): leitura **sem JWT**; **`coin`**: exige JWT (senão **403** `authentication_required`). Com JWT válido, aplica cota / regras de plano. |
 | **200** | Metadados do capítulo, `pages` ordenadas, `prevChapterId`, `nextChapterId` (entre capítulos publicados) |
-| **401** | Sem token ou token inválido |
-| **403** | Plano gratuito: limite semanal excedido; ou capítulo **`coin`** no MVP (`reason` no corpo) |
+| **401** | Header `Authorization: Bearer` **presente** mas token inválido ou expirado |
+| **403** | `coin` sem login (`reason: authentication_required`); com JWT: limite semanal excedido ou capítulo **`coin`** no MVP (`reason: coin_chapter_not_available`) |
 | **404** | Capítulo inexistente / não publicado / soft-deleted |
 
-Após checagem de acesso, capítulos **`public`** consomem cota semanal de forma idempotente por `(usuário, capítulo, semana ISO UTC)`.
+**Visitante (sem JWT)** em capítulo **`public`**: não consome cota semanal nem grava progresso no servidor.
 
-Após **consumo** bem-sucedido, o servidor grava progresso como no `PATCH` de leitura (`chapterId` atual, `pageNumber: 1`). Falha ao gravar progresso **não** altera o **200** da leitura.
+**Usuário autenticado** em capítulo **`public`**: após checagem de acesso, consome cota de forma idempotente por `(usuário, capítulo, semana ISO UTC)`.
+
+Após **consumo** bem-sucedido (fluxo autenticado), o servidor grava progresso como no `PATCH` de leitura (`chapterId` atual, `pageNumber: 1`). Falha ao gravar progresso **não** altera o **200** da leitura.
 
 ---
 
 ## 8. Decisão produto — capítulos `coin` (G.4)
 
-- **Listagem** `GET /mangas/:slug/chapters` e **métricas no detalhe** (`chaptersCount`, `latestChapters`): só entram capítulos **`public`** publicados.
-- **Leitura** `GET /chapters/:id`: capítulo **`coin`** responde **403** com `reason: coin_chapter_not_available` até existir fluxo de coins.
+- **Listagem** `GET /mangas/:slug/chapters`: capítulos **publicados** (`public` e `coin`) em **paginação** (`page`, `limit`, `order`); `isLocked` para UX; ordenação natural por `number`.
+- **Por número** `GET /mangas/:slug/chapters/by-number/:number`: a partir do capítulo com aquele `number`, lista **asc** paginada (deep link + scroll); leitura com imagens em `GET /chapters/:id`.
+- **Preview no detalhe** (`chaptersCount`, `latestChapters`): só **amostra** recente no JSON do mangá; lista completa = endpoint paginado acima.
+- **Leitura** `GET /chapters/:id`: capítulo **`coin`** **sem JWT** → **403** `reason: authentication_required`; **com JWT** → **403** `reason: coin_chapter_not_available` até existir fluxo de coins.
 
 Detalhe curto: [`API-ROTAS-MVP.md` § Decisão G.4](./API-ROTAS-MVP.md).
 
@@ -198,7 +227,7 @@ Todas exigem **JWT**.
 | | |
 |--|--|
 | **Query** | `limit` opcional (inteiro 1–100; default **20** no use case). Valor inválido → **400** |
-| **200** | Array de entradas “continuar lendo”, ordenado por `lastReadAt` desc. Cada item inclui `chaptersCount` (total de capítulos **public** + **public** no mangá, mesma regra do detalhe) para barra de progresso com `chaptersReadCount`. Omite mangá/capítulo indisponíveis (soft delete / não publicado) |
+| **200** | Array de entradas “continuar lendo”, ordenado por `lastReadAt` desc. Cada item inclui `chaptersCount` (total de capítulos **publicados** no mangá, mesma regra do detalhe) para barra de progresso com `chaptersReadCount`. Omite mangá/capítulo indisponíveis (soft delete / não publicado) |
 
 ### `PATCH /users/me/reading-progress`
 

@@ -41,7 +41,7 @@ export class ContinueReadingEntryResponseDto {
 
   @ApiProperty({
     description:
-      'Total de capítulos publicados e públicos no mangá (barra: chaptersReadCount / chaptersCount).',
+      'Total de capítulos publicados no mangá (barra: chaptersReadCount / chaptersCount).',
   })
   chaptersCount!: number;
 

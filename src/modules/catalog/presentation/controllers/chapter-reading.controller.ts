@@ -16,9 +16,9 @@ import { GetChapterForReadingUseCase } from '../../application/use-cases/get-cha
 import { ChapterForReadingResponseDto } from '../dto/chapter-for-reading-response.dto';
 import { ChapterAccessForbiddenResponseDto } from '../dto/chapter-access-forbidden-response.dto';
 import { ErrorResponseDto } from '../../../auth/presentation/dto/error-response.dto';
-import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../../auth/presentation/guards/optional-jwt-auth.guard';
 import { NotFoundError } from '../../../../shared/domain/errors';
-import type { AuthenticatedRequest } from '../../../auth/presentation/types/authenticated-request';
+import type { OptionalAuthenticatedRequest } from '../../../auth/presentation/types/optional-authenticated-request';
 
 @ApiTags('Catalog')
 @Controller('chapters')
@@ -28,15 +28,16 @@ export class ChapterReadingController {
   ) {}
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiBearerAuth('Bearer')
   @ApiOperation({
     summary: 'Capítulo para leitura (páginas + prev/next)',
     description:
-      'Requer JWT. Aplica limite semanal do plano gratuito (capítulos public); ' +
-      'roles VIP/ADMIN/MODERATOR e planos com leitura ilimitada ficam liberados. ' +
-      'Capítulos por coins retornam 403 no MVP até o fluxo de coins existir. ' +
-      'Após acesso concedido, grava progresso de leitura (capítulo atual, página 1) como no PATCH de progresso; falha ao gravar não impede a resposta.',
+      'Capítulos **public** (faixa grátis): podem ser lidos **sem JWT**; não consomem cota semanal nem gravam progresso no servidor. ' +
+      'Com **JWT**, aplica limite semanal do plano gratuito; roles VIP/ADMIN/MODERATOR e planos ilimitados ficam liberados. ' +
+      'Capítulos **coin** exigem login (403 `authentication_required` sem token); com token, 403 `coin_chapter_not_available` no MVP até o fluxo de coins. ' +
+      'Se enviar `Authorization: Bearer` inválido → 401. ' +
+      'Com usuário autenticado e acesso concedido, grava progresso (capítulo atual, página 1); falha ao gravar não impede a resposta.',
   })
   @ApiResponse({ status: 200, type: ChapterForReadingResponseDto })
   @ApiResponse({ status: 401, type: ErrorResponseDto })
@@ -44,13 +45,15 @@ export class ChapterReadingController {
   @ApiResponse({ status: 404, type: ErrorResponseDto })
   async getById(
     @Param('id') id: string,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: OptionalAuthenticatedRequest,
   ): Promise<ChapterForReadingResponseDto> {
     try {
+      const u = req.user;
       return await this.getChapterForReading.execute({
         chapterId: id,
-        userId: req.user.userId,
-        role: req.user.role,
+        user: u
+          ? { userId: u.userId, role: u.role }
+          : null,
       });
     } catch (err) {
       if (err instanceof NotFoundError) {

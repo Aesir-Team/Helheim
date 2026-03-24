@@ -17,6 +17,7 @@ const DETAIL: ChapterDetailDto = {
   number: '2',
   title: 'Dois',
   accessLevel: 'public',
+  isLocked: false,
   coinCost: 0,
   views: 10,
   createdAt: new Date('2026-01-02'),
@@ -34,11 +35,17 @@ function makeRepo(
   return {
     findExistingNumbersByMangaId: jest.fn().mockResolvedValue([]),
     listByMangaSlug: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+    listPublishedSummariesFromMangaSlugFromNumberAsc: jest
+      .fn()
+      .mockResolvedValue(null),
     findById: jest.fn().mockResolvedValue(null),
     findNeighborChapterIds: jest
       .fn()
       .mockResolvedValue({ prevChapterId: null, nextChapterId: null }),
     upsertByMangaAndNumber: jest.fn().mockResolvedValue({ id: 'x' }),
+    applyFreeTierAccessForManga: jest
+      .fn()
+      .mockResolvedValue({ publicCount: 0, coinCount: 0 }),
     ...overrides,
   };
 }
@@ -66,8 +73,7 @@ describe('GetChapterForReadingUseCase', () => {
       await expect(
         sut.execute({
           chapterId: 'missing-id',
-          userId: 'u1',
-          role: 'USER',
+          user: { userId: 'u1', role: 'USER' },
         }),
       ).rejects.toThrow(NotFoundError);
       expect(repo.findNeighborChapterIds).not.toHaveBeenCalled();
@@ -102,11 +108,17 @@ describe('GetChapterForReadingUseCase', () => {
       );
 
       await expect(
-        sut.execute({ chapterId: 'ch-2', userId: 'u1', role: 'USER' }),
+        sut.execute({
+          chapterId: 'ch-2',
+          user: { userId: 'u1', role: 'USER' },
+        }),
       ).rejects.toThrow(ForbiddenError);
 
       try {
-        await sut.execute({ chapterId: 'ch-2', userId: 'u1', role: 'USER' });
+        await sut.execute({
+          chapterId: 'ch-2',
+          user: { userId: 'u1', role: 'USER' },
+        });
         expect(true).toBe(false);
       } catch (e: unknown) {
         expect(e).toBeInstanceOf(ForbiddenError);
@@ -154,8 +166,7 @@ describe('GetChapterForReadingUseCase', () => {
 
       const out = await sut.execute({
         chapterId: 'ch-2',
-        userId: 'u1',
-        role: 'USER',
+        user: { userId: 'u1', role: 'USER' },
       });
 
       expect(out.id).toBe('ch-2');
@@ -183,6 +194,86 @@ describe('GetChapterForReadingUseCase', () => {
         pageNumber: 1,
       });
       expect(repo.findNeighborChapterIds).toHaveBeenCalledWith('ch-2');
+    });
+  });
+
+  describe('Given visitante (sem usuário) e capítulo public', () => {
+    it('should return páginas e vizinhos sem check, consume nem progresso', async () => {
+      const repo = makeRepo({
+        findById: jest.fn().mockResolvedValue(DETAIL),
+        findNeighborChapterIds: jest.fn().mockResolvedValue({
+          prevChapterId: 'ch-1',
+          nextChapterId: 'ch-3',
+        }),
+      });
+      const checkChapterAccess = {
+        execute: jest.fn(),
+      } as unknown as CheckChapterAccessUseCase;
+      const consumeWeeklyChapterAccess = {
+        execute: jest.fn(),
+      } as unknown as ConsumeWeeklyChapterAccessUseCase;
+      const saveReadingProgress = {
+        execute: jest.fn(),
+      } as unknown as SaveReadingProgressUseCase;
+      const sut = new GetChapterForReadingUseCase(
+        repo,
+        checkChapterAccess,
+        consumeWeeklyChapterAccess,
+        saveReadingProgress,
+      );
+
+      const out = await sut.execute({ chapterId: 'ch-2', user: null });
+
+      expect(out.pages).toEqual([
+        { pageNumber: 1, imageUrl: 'https://a.jpg' },
+        { pageNumber: 2, imageUrl: 'https://b.jpg' },
+      ]);
+      expect(checkChapterAccess.execute).not.toHaveBeenCalled();
+      expect(consumeWeeklyChapterAccess.execute).not.toHaveBeenCalled();
+      expect(saveReadingProgress.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Given visitante e capítulo coin', () => {
+    it('should throw ForbiddenError authentication_required', async () => {
+      const coinDetail: ChapterDetailDto = {
+        ...DETAIL,
+        accessLevel: 'coin',
+        isLocked: true,
+        coinCost: 10,
+      };
+      const repo = makeRepo({
+        findById: jest.fn().mockResolvedValue(coinDetail),
+      });
+      const checkChapterAccess = {
+        execute: jest.fn(),
+      } as unknown as CheckChapterAccessUseCase;
+      const consumeWeeklyChapterAccess = {
+        execute: jest.fn(),
+      } as unknown as ConsumeWeeklyChapterAccessUseCase;
+      const saveReadingProgress = {
+        execute: jest.fn(),
+      } as unknown as SaveReadingProgressUseCase;
+      const sut = new GetChapterForReadingUseCase(
+        repo,
+        checkChapterAccess,
+        consumeWeeklyChapterAccess,
+        saveReadingProgress,
+      );
+
+      await expect(
+        sut.execute({ chapterId: 'ch-2', user: null }),
+      ).rejects.toThrow(ForbiddenError);
+
+      try {
+        await sut.execute({ chapterId: 'ch-2', user: null });
+        expect(true).toBe(false);
+      } catch (e: unknown) {
+        expect(e).toBeInstanceOf(ForbiddenError);
+        const fe = e as ForbiddenError;
+        expect(fe.reasonCode).toBe('authentication_required');
+      }
+      expect(checkChapterAccess.execute).not.toHaveBeenCalled();
     });
   });
 });

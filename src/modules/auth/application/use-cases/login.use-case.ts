@@ -45,6 +45,7 @@ export class LoginUseCase {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      nickname: user.nickname,
       role: user.role,
       coinsBalance: user.coinsBalance,
       createdAt: user.createdAt,

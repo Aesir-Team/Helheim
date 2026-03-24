@@ -29,7 +29,7 @@ export class ListChaptersUseCase {
   async execute(input: ListChaptersInput): Promise<ListChaptersOutput> {
     const page = input.page ?? 1;
     const limit = Math.min(input.limit ?? 50, 200);
-    const order = input.order ?? 'desc';
+    const order = input.order ?? 'asc';
 
     const result = await this.chapterRepo.listByMangaSlug(input.mangaSlug, {
       order,

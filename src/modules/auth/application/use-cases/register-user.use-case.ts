@@ -15,6 +15,7 @@ import {
 } from '../../../access/application/ports/plan.repository.port';
 import { ConflictError } from '../../../../shared/domain/errors';
 import { AuthUser } from '../../domain/entities/user.entity';
+import { normalizeNickname } from '../../domain/nickname.normalization';
 
 const FREE_PLAN_SLUG = 'gratuito';
 
@@ -23,6 +24,7 @@ export interface RegisterUserInput {
   password: string;
   firstName: string;
   lastName: string;
+  nickname: string;
 }
 
 export interface RegisterUserOutput {
@@ -46,12 +48,22 @@ export class RegisterUserUseCase {
     const existing = await this.userRepo.findByEmail(input.email);
     if (existing) throw new ConflictError('Email já cadastrado');
 
+    const nickname = normalizeNickname(input.nickname);
+    if (!nickname) {
+      throw new ConflictError('Nickname inválido');
+    }
+    const nickTaken = await this.userRepo.findByNickname(nickname);
+    if (nickTaken) {
+      throw new ConflictError('Nickname já em uso');
+    }
+
     const passwordHash = await this.hashService.hash(input.password);
     const user = await this.userRepo.create({
       email: input.email,
       passwordHash,
       firstName: input.firstName,
       lastName: input.lastName,
+      nickname,
     });
 
     await this.attachFreePlan(user.id);
@@ -67,6 +79,7 @@ export class RegisterUserUseCase {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      nickname: user.nickname,
       role: user.role,
       coinsBalance: user.coinsBalance,
       createdAt: user.createdAt,

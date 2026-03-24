@@ -31,6 +31,7 @@ describe('RegisterUserUseCase', () => {
     password: 'hashed',
     firstName: 'Test',
     lastName: 'User',
+    nickname: 'testuser',
     role: 'USER',
     coinsBalance: 0,
     createdAt: new Date(),
@@ -48,6 +49,7 @@ describe('RegisterUserUseCase', () => {
   beforeEach(async () => {
     userRepo = {
       findByEmail: jest.fn(),
+      findByNickname: jest.fn().mockResolvedValue(null),
       findById: jest.fn(),
       create: jest.fn().mockResolvedValue(mockUser),
       updateProfile: jest.fn(),
@@ -90,15 +92,18 @@ describe('RegisterUserUseCase', () => {
       password: 'plain',
       firstName: 'Test',
       lastName: 'User',
+      nickname: 'TestUser',
     });
 
     expect(userRepo.findByEmail).toHaveBeenCalledWith('test@example.com');
+    expect(userRepo.findByNickname).toHaveBeenCalledWith('testuser');
     expect(hashService.hash).toHaveBeenCalledWith('plain');
     expect(userRepo.create).toHaveBeenCalledWith({
       email: 'test@example.com',
       passwordHash: 'hashed',
       firstName: 'Test',
       lastName: 'User',
+      nickname: 'testuser',
     });
     expect(planRepo.findBySlug).toHaveBeenCalledWith('gratuito');
     expect(subscriptionRepo.create).toHaveBeenCalledWith({
@@ -125,6 +130,7 @@ describe('RegisterUserUseCase', () => {
       password: 'plain',
       firstName: 'Test',
       lastName: 'User',
+      nickname: 'TestUser',
     });
 
     expect(subscriptionRepo.create).not.toHaveBeenCalled();
@@ -141,10 +147,28 @@ describe('RegisterUserUseCase', () => {
         password: 'plain',
         firstName: 'Test',
         lastName: 'User',
+        nickname: 'TestUser',
       }),
     ).rejects.toThrow(ConflictError);
 
     expect(userRepo.create).not.toHaveBeenCalled();
     expect(subscriptionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('deve lançar ConflictError se nickname já existir', async () => {
+    userRepo.findByEmail.mockResolvedValue(null);
+    userRepo.findByNickname.mockResolvedValue(mockUser);
+
+    await expect(
+      useCase.execute({
+        email: 'novo@example.com',
+        password: 'plain',
+        firstName: 'N',
+        lastName: 'O',
+        nickname: 'testuser',
+      }),
+    ).rejects.toThrow(ConflictError);
+
+    expect(userRepo.create).not.toHaveBeenCalled();
   });
 });

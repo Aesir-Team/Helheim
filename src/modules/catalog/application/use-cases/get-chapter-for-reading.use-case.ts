@@ -13,8 +13,14 @@ import { CheckChapterAccessUseCase } from '../../../access/application/use-cases
 import { ConsumeWeeklyChapterAccessUseCase } from '../../../access/application/use-cases/consume-weekly-chapter-access.use-case';
 import { SaveReadingProgressUseCase } from '../../../progress/application/use-cases/save-reading-progress.use-case';
 
+/** Visitante sem JWT em capítulo `coin` — precisa de conta para desbloqueio futuro / cota. */
+export const CHAPTER_READING_REASON_AUTH_REQUIRED =
+  'authentication_required' as const;
+
 /**
  * Fase D (PLANO-MVP): após autenticação, CheckChapterAccess + ConsumeWeeklyChapterAccess (cap. public).
+ *
+ * Capítulos `public` (faixa grátis): visitante pode ler sem JWT (sem cota nem progresso no servidor).
  *
  * Regra de produto: navegação prev/next via ordenação por `number` (schema sem linked list).
  */
@@ -25,8 +31,8 @@ export interface ChapterForReadingDto extends ChapterDetailDto {
 
 export interface GetChapterForReadingInput {
   chapterId: string;
-  userId: string;
-  role: string;
+  /** `null` = visitante (só leitura de capítulos `public`). */
+  user: { userId: string; role: string } | null;
 }
 
 @Injectable()
@@ -51,10 +57,34 @@ export class GetChapterForReadingUseCase {
     }
 
     const accessLevel = this.toAccessLevel(detail.accessLevel);
+    const user = input.user;
+
+    if (user === null) {
+      if (accessLevel === 'coin') {
+        throw new ForbiddenError(
+          'Faça login para acessar capítulos bloqueados por coins.',
+          CHAPTER_READING_REASON_AUTH_REQUIRED,
+        );
+      }
+      if (accessLevel === 'public') {
+        const { prevChapterId, nextChapterId } =
+          await this.chapterRepo.findNeighborChapterIds(input.chapterId);
+        return {
+          ...detail,
+          pages: this.sortPages(detail.pages),
+          prevChapterId,
+          nextChapterId,
+        };
+      }
+      throw new ForbiddenError(
+        'Autenticação necessária para este capítulo.',
+        CHAPTER_READING_REASON_AUTH_REQUIRED,
+      );
+    }
 
     const access = await this.checkChapterAccess.execute({
-      userId: input.userId,
-      role: input.role,
+      userId: user.userId,
+      role: user.role,
       chapterId: detail.id,
       accessLevel,
     });
@@ -64,14 +94,14 @@ export class GetChapterForReadingUseCase {
     }
 
     await this.consumeWeeklyChapterAccess.execute({
-      userId: input.userId,
+      userId: user.userId,
       chapterId: detail.id,
       accessLevel,
     });
 
     try {
       await this.saveReadingProgress.execute({
-        userId: input.userId,
+        userId: user.userId,
         mangaId: detail.mangaId,
         chapterId: detail.id,
         pageNumber: 1,

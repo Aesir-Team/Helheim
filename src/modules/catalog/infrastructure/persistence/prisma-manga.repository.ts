@@ -34,7 +34,6 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
           where: {
             deletedAt: null,
             releaseStatus: 'published',
-            accessLevel: 'public',
           },
           orderBy: { createdAt: 'desc' },
           take: 5,
@@ -46,7 +45,6 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
               where: {
                 deletedAt: null,
                 releaseStatus: 'published',
-                accessLevel: 'public',
               },
             },
           },
@@ -163,6 +161,56 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
       limit: params.limit,
       totalPages: Math.ceil(total / params.limit),
     };
+  }
+
+  async listBySlugs(
+    slugs: string[],
+    includeNsfw?: boolean,
+  ): Promise<MangaSummaryDto[]> {
+    if (slugs.length === 0) {
+      return [];
+    }
+
+    const rows = await this.prisma.manga.findMany({
+      where: {
+        deletedAt: null,
+        slug: { in: slugs },
+        ...(includeNsfw === true ? {} : { isNsfw: false }),
+      },
+      include: { categories: { include: { category: true } } },
+    });
+
+    const bySlug = new Map<string, MangaSummaryDto>(
+      rows.map((row) => [
+        row.slug,
+        {
+          id: row.id,
+          title: row.title,
+          slug: row.slug,
+          coverImage: row.coverImage,
+          status: row.status,
+          type: row.type,
+          rating: row.rating,
+          views: row.views,
+          isNsfw: row.isNsfw,
+          lastChapterAt: row.lastChapterAt,
+          categories: row.categories.map((mc) => ({
+            id: mc.category.id,
+            name: mc.category.name,
+            slug: mc.category.slug,
+          })),
+        },
+      ]),
+    );
+
+    const ordered: MangaSummaryDto[] = [];
+    for (const slug of slugs) {
+      const row = bySlug.get(slug);
+      if (row) {
+        ordered.push(row);
+      }
+    }
+    return ordered;
   }
 
   async upsertBySlug(input: UpsertMangaInput): Promise<{ id: string }> {

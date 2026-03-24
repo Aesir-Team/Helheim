@@ -11,9 +11,13 @@ export class ChapterAccessForbiddenResponseDto {
 
   @ApiProperty({
     description:
-      'Motivo estável para o cliente (ex.: limite semanal ou capítulo por coins no MVP).',
+      'Motivo estável para o cliente (ex.: limite semanal, capítulo por coins no MVP ou login obrigatório para coin).',
     example: 'weekly_chapter_limit_exceeded',
-    enum: ['weekly_chapter_limit_exceeded', 'coin_chapter_not_available'],
+    enum: [
+      'weekly_chapter_limit_exceeded',
+      'coin_chapter_not_available',
+      'authentication_required',
+    ],
   })
   reason!: string;
 }

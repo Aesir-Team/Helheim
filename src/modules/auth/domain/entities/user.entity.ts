@@ -8,6 +8,7 @@ export interface AuthUser {
   email: string;
   firstName: string;
   lastName: string;
+  nickname: string;
   role: UserRole;
   coinsBalance: number;
   createdAt: Date;

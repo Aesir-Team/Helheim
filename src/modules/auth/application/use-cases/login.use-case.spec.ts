@@ -21,6 +21,7 @@ describe('LoginUseCase', () => {
     password: 'hashed',
     firstName: 'Test',
     lastName: 'User',
+    nickname: 'testuser',
     role: 'USER',
     coinsBalance: 0,
     createdAt: new Date(),
@@ -30,6 +31,7 @@ describe('LoginUseCase', () => {
   beforeEach(async () => {
     userRepo = {
       findByEmail: jest.fn().mockResolvedValue(mockUser),
+      findByNickname: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
       updateProfile: jest.fn(),
