@@ -3,12 +3,11 @@ import {
   CHAPTER_COIN_UNLOCK_REPOSITORY,
   type ChapterCoinUnlockRepositoryPort,
 } from '../ports/chapter-coin-unlock.repository.port';
+import { isPrivilegedCatalogReaderRole } from '../../../../shared/domain/catalog-privileged-roles';
 
 /** Capítulo `coin` sem registro de desbloqueio para o usuário. */
 export const CHAPTER_ACCESS_REASON_COIN_NOT_UNLOCKED =
   'coin_chapter_not_unlocked' as const;
-
-const PRIVILEGED_ROLES = new Set(['VIP', 'ADMIN', 'MODERATOR']);
 
 export interface CheckChapterAccessInput {
   userId: string;
@@ -39,7 +38,7 @@ export class CheckChapterAccessUseCase {
   async execute(
     input: CheckChapterAccessInput,
   ): Promise<CheckChapterAccessOutput> {
-    if (PRIVILEGED_ROLES.has(input.role)) {
+    if (isPrivilegedCatalogReaderRole(input.role)) {
       return { allowed: true };
     }
 

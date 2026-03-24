@@ -17,6 +17,7 @@ Referência **expandida** (parâmetros, erros, auth, checklist): [`API-MVP-DETAL
 - **A partir de um número** (`GET /mangas/:slug/chapters/by-number/:number`): encontra o capítulo **publicado** com aquele `number` e devolve **`data` em ordem asc** a partir dele (inclusive), **paginado** (`page`, `limit`, mesmos defaults/máx. da listagem); leitura com páginas em `GET /chapters/:id` (UUID).
 - **Preview no detalhe do mangá** (`chaptersCount`, `latestChapters`): apenas os **últimos** capítulos publicados no payload (não substitui a listagem paginada).
 - **Faixa grátis (~10% por padrão):** ao fim de cada sync e via `npm run db:apply-free-tier`, os primeiros capítulos (por ordem de `number`) ficam **`public`**; o restante **`coin`** (`MANGA_FREE_CHAPTER_FRACTION`, `MANGA_COIN_CHAPTER_COST` no `.env`).
+- **Listagem de capítulos** (`GET /mangas/:slug/chapters` e `.../by-number/...`): **JWT opcional**; com token, `isLocked` considera VIP ou desbloqueio por coins.
 - **Leitura** (`GET /chapters/:id`): capítulo **`public`** pode ser lido **sem JWT** (sem progresso no servidor). Capítulo **`coin`** sem JWT → **403** `authentication_required`; com JWT → **403** `coin_chapter_not_unlocked` se ainda não desbloqueado (ver `ChapterAccessForbiddenResponseDto`).
 
 ---

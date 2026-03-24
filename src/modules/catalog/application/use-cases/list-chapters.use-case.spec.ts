@@ -3,6 +3,7 @@ import type {
   ChapterRepositoryPort,
   ChapterSummaryDto,
 } from '../ports/chapter.repository.port';
+import type { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
 
 const CHAPTER_STUB: ChapterSummaryDto = {
   id: 'ch-1',
@@ -38,10 +39,16 @@ function makeRepo(
   };
 }
 
+function makeLockApplier(): ChapterSummariesViewerLockApplier {
+  return {
+    apply: jest.fn(async (_v, items) => [...items]),
+  } as unknown as ChapterSummariesViewerLockApplier;
+}
+
 describe('ListChaptersUseCase', () => {
   it('should list chapters with defaults (asc, page 1, limit 50)', async () => {
     const repo = makeRepo();
-    const sut = new ListChaptersUseCase(repo);
+    const sut = new ListChaptersUseCase(repo, makeLockApplier());
 
     const result = await sut.execute({ mangaSlug: 'solo-leveling' });
 
@@ -55,7 +62,7 @@ describe('ListChaptersUseCase', () => {
 
   it('should cap limit at 200', async () => {
     const repo = makeRepo();
-    const sut = new ListChaptersUseCase(repo);
+    const sut = new ListChaptersUseCase(repo, makeLockApplier());
 
     await sut.execute({ mangaSlug: 'test', limit: 999 });
 
@@ -68,7 +75,7 @@ describe('ListChaptersUseCase', () => {
 
   it('should forward order and page params', async () => {
     const repo = makeRepo();
-    const sut = new ListChaptersUseCase(repo);
+    const sut = new ListChaptersUseCase(repo, makeLockApplier());
 
     await sut.execute({ mangaSlug: 'test', order: 'asc', page: 3, limit: 10 });
 

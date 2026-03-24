@@ -66,6 +66,7 @@ export class GetChapterForReadingUseCase {
           await this.chapterRepo.findNeighborChapterIds(input.chapterId);
         return {
           ...detail,
+          isLocked: false,
           pages: this.sortPages(detail.pages),
           prevChapterId,
           nextChapterId,
@@ -107,6 +108,7 @@ export class GetChapterForReadingUseCase {
 
     return {
       ...detail,
+      isLocked: false,
       pages: this.sortPages(detail.pages),
       prevChapterId,
       nextChapterId,

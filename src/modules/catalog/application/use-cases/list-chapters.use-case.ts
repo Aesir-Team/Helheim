@@ -4,12 +4,18 @@ import {
   type ChapterRepositoryPort,
   type ChapterSummaryDto,
 } from '../ports/chapter.repository.port';
+import {
+  ChapterSummariesViewerLockApplier,
+  type ChapterListViewerContext,
+} from '../services/chapter-summaries-viewer-lock.applier';
 
 export interface ListChaptersInput {
   mangaSlug: string;
   order?: 'asc' | 'desc';
   page?: number;
   limit?: number;
+  /** Com JWT opcional: ajusta `isLocked` para VIP/desbloqueios reais. */
+  viewer?: ChapterListViewerContext | null;
 }
 
 export interface ListChaptersOutput {
@@ -24,6 +30,7 @@ export class ListChaptersUseCase {
   constructor(
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: ChapterRepositoryPort,
+    private readonly viewerLockApplier: ChapterSummariesViewerLockApplier,
   ) {}
 
   async execute(input: ListChaptersInput): Promise<ListChaptersOutput> {
@@ -37,6 +44,11 @@ export class ListChaptersUseCase {
       limit,
     });
 
-    return { ...result, page, limit };
+    const data = await this.viewerLockApplier.apply(
+      input.viewer ?? null,
+      result.data,
+    );
+
+    return { data, total: result.total, page, limit };
   }
 }

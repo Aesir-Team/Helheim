@@ -141,7 +141,7 @@ Após responder **200**, dispara em **background** (`SyncMangaFromSourceUseCase`
 
 | | |
 |--|--|
-| **Auth** | Não |
+| **Auth** | **Opcional** (`Authorization: Bearer`) — sem token, `isLocked` = `accessLevel === coin`; com token válido, `isLocked` reflete **VIP/ADMIN/MODERATOR** ou **desbloqueio** (`UserChapterCoinUnlock`). Bearer **inválido** → **401**. |
 | **Query** | `order` (`asc` \| `desc`, default **`asc`** — cap. 1, 2, 3…), `page` (default **1**), `limit` (default **50**, máx. **200**) |
 | **200** | Lista **paginada** de capítulos **publicados** (`public` e `coin`); campo `isLocked` indica bloqueio na UI. Ordenação por `number` em **ordem natural** (ex.: 1, 2, 10 — não lexicográfica). |
 
@@ -149,7 +149,7 @@ Após responder **200**, dispara em **background** (`SyncMangaFromSourceUseCase`
 
 | | |
 |--|--|
-| **Auth** | Não |
+| **Auth** | **Opcional** — mesma regra de `isLocked` que `GET .../chapters`; Bearer inválido → **401**. |
 | **Path** | `number` = valor do campo `number` do capítulo no BD (ex.: `1`, `12.5`) — **igualdade exata** |
 | **Query** | `page` (default **1**), `limit` (default **50**, máx. **200**) — paginação sobre o subconjunto **a partir desse capítulo (inclusive), ordem asc natural** |
 | **200** | Mesmo formato de `GET .../mangas/:slug/chapters`: `{ data, total, page, limit }`. `data` está sempre em **ordem ascendente** por `number`; `total` = quantidade de capítulos publicados **desse número até o fim** do mangá |

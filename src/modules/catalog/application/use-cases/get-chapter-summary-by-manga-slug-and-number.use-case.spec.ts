@@ -4,6 +4,13 @@ import type {
   ChapterSummaryDto,
 } from '../ports/chapter.repository.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
+import type { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
+
+function makeLockApplier(): ChapterSummariesViewerLockApplier {
+  return {
+    apply: jest.fn(async (_v, items) => [...items]),
+  } as unknown as ChapterSummariesViewerLockApplier;
+}
 
 const S1: ChapterSummaryDto = {
   id: 'ch-1',
@@ -56,7 +63,10 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
           .fn()
           .mockResolvedValue({ data: [S1, S2], total: 2 }),
       });
-      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(repo);
+      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
+        repo,
+        makeLockApplier(),
+      );
 
       const out = await sut.execute({
         mangaSlug: 'solo-leveling',
@@ -80,7 +90,10 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
           .fn()
           .mockResolvedValue({ data: [S1], total: 1 }),
       });
-      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(repo);
+      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
+        repo,
+        makeLockApplier(),
+      );
 
       await sut.execute({
         mangaSlug: '  solo-leveling  ',
@@ -100,7 +113,10 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
           .fn()
           .mockResolvedValue({ data: [], total: 0 }),
       });
-      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(repo);
+      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
+        repo,
+        makeLockApplier(),
+      );
 
       await sut.execute({
         mangaSlug: 'solo',
@@ -121,7 +137,10 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
           .fn()
           .mockResolvedValue(null),
       });
-      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(repo);
+      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
+        repo,
+        makeLockApplier(),
+      );
 
       await expect(
         sut.execute({ mangaSlug: 'x', chapterNumber: '99' }),
@@ -130,7 +149,10 @@ describe('GetChapterSummaryByMangaSlugAndNumberUseCase', () => {
 
     it('should throw NotFoundError quando número vazio após trim', async () => {
       const repo = makeRepo();
-      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(repo);
+      const sut = new GetChapterSummaryByMangaSlugAndNumberUseCase(
+        repo,
+        makeLockApplier(),
+      );
 
       await expect(
         sut.execute({ mangaSlug: 'solo', chapterNumber: '   ' }),

@@ -5,6 +5,8 @@ import {
 } from '../ports/chapter.repository.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
 import type { ListChaptersOutput } from './list-chapters.use-case';
+import type { ChapterListViewerContext } from '../services/chapter-summaries-viewer-lock.applier';
+import { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
 
 export interface GetChapterSummaryByMangaSlugAndNumberInput {
   mangaSlug: string;
@@ -12,6 +14,7 @@ export interface GetChapterSummaryByMangaSlugAndNumberInput {
   chapterNumber: string;
   page?: number;
   limit?: number;
+  viewer?: ChapterListViewerContext | null;
 }
 
 @Injectable()
@@ -19,6 +22,7 @@ export class GetChapterSummaryByMangaSlugAndNumberUseCase {
   constructor(
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: ChapterRepositoryPort,
+    private readonly viewerLockApplier: ChapterSummariesViewerLockApplier,
   ) {}
 
   async execute(
@@ -44,6 +48,11 @@ export class GetChapterSummaryByMangaSlugAndNumberUseCase {
       );
     }
 
-    return { ...result, page, limit };
+    const data = await this.viewerLockApplier.apply(
+      input.viewer ?? null,
+      result.data,
+    );
+
+    return { data, total: result.total, page, limit };
   }
 }

@@ -15,4 +15,18 @@ export class PrismaChapterCoinUnlockRepository
     });
     return row != null;
   }
+
+  async findUnlockedChapterIdsForUser(
+    userId: string,
+    chapterIds: string[],
+  ): Promise<ReadonlySet<string>> {
+    if (chapterIds.length === 0) {
+      return new Set();
+    }
+    const rows = await this.prisma.userChapterCoinUnlock.findMany({
+      where: { userId, chapterId: { in: chapterIds } },
+      select: { chapterId: true },
+    });
+    return new Set(rows.map((r) => r.chapterId));
+  }
 }
