@@ -10,19 +10,15 @@ import {
   NotFoundError,
 } from '../../../../shared/domain/errors';
 import { CheckChapterAccessUseCase } from '../../../access/application/use-cases/check-chapter-access.use-case';
-import { ConsumeWeeklyChapterAccessUseCase } from '../../../access/application/use-cases/consume-weekly-chapter-access.use-case';
 import { SaveReadingProgressUseCase } from '../../../progress/application/use-cases/save-reading-progress.use-case';
 
-/** Visitante sem JWT em capítulo `coin` — precisa de conta para desbloqueio futuro / cota. */
+/** Visitante sem JWT em capítulo `coin` — precisa de conta para desbloqueio. */
 export const CHAPTER_READING_REASON_AUTH_REQUIRED =
   'authentication_required' as const;
 
 /**
- * Fase D (PLANO-MVP): após autenticação, CheckChapterAccess + ConsumeWeeklyChapterAccess (cap. public).
- *
- * Capítulos `public` (faixa grátis): visitante pode ler sem JWT (sem cota nem progresso no servidor).
- *
- * Regra de produto: navegação prev/next via ordenação por `number` (schema sem linked list).
+ * Capítulos `public`: leitura gratuita (sem consumo de coins; visitante sem JWT não grava progresso).
+ * Capítulos `coin`: exigem JWT e `UserChapterCoinUnlock` (desbloqueio em fluxo separado de coins).
  */
 export interface ChapterForReadingDto extends ChapterDetailDto {
   prevChapterId: string | null;
@@ -43,7 +39,6 @@ export class GetChapterForReadingUseCase {
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: ChapterRepositoryPort,
     private readonly checkChapterAccess: CheckChapterAccessUseCase,
-    private readonly consumeWeeklyChapterAccess: ConsumeWeeklyChapterAccessUseCase,
     @Inject(forwardRef(() => SaveReadingProgressUseCase))
     private readonly saveReadingProgress: SaveReadingProgressUseCase,
   ) {}
@@ -92,12 +87,6 @@ export class GetChapterForReadingUseCase {
     if (!access.allowed) {
       throw new ForbiddenError(access.message, access.reasonCode);
     }
-
-    await this.consumeWeeklyChapterAccess.execute({
-      userId: user.userId,
-      chapterId: detail.id,
-      accessLevel,
-    });
 
     try {
       await this.saveReadingProgress.execute({

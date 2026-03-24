@@ -13,7 +13,7 @@ Entregar uma API que permita ao app mobile:
 | **Conta** | Registrar, logar, ver e editar perfil (JWT). |
 | **Catálogo** | Listar/buscar mangás, ver ficha, listar capítulos, ver páginas do capítulo. |
 | **Sync** | Banco primeiro; se não existir, buscar fonte externa e persistir; atualização periódica em background sem bloquear a request. |
-| **Acesso** | Plano gratuito com **limite semanal** de capítulos distintos; bloquear leitura quando exceder; VIP/assinante ilimitado quando o plano estiver ligado ao usuário. |
+| **Acesso** | Capítulos **`public`** sem limite semanal; capítulos **`coin`** exigem desbloqueio (`UserChapterCoinUnlock`); papéis VIP/ADMIN/MODERATOR ignoram bloqueio por coin na leitura. |
 | **Listas** | CRUD de listas e itens (mangá em lista). |
 | **Progresso** | Salvar último capítulo/página; listar "continuar lendo". |
 
@@ -70,7 +70,7 @@ npm run db:seed             # plano gratuito
 | `ExternalMangaGatewayPort` + `NexustoonsMangaGateway` (adapter HTTP) | **Feito** (testes unitários passando) |
 | `CatalogInfrastructureModule` registrado em `AppModule` | **Feito** |
 | `AccessApplicationModule` (`GetEffectivePlanUseCase`, ports Plan/Subscription) | **Feito** (Fase A.2 — testes passando) |
-| `CatalogApplicationModule` + `CatalogController` + `ChapterReadingController` (Fases B–D) | **Feito** (`GET /chapters/:id` com JWT, cota semanal + consume) |
+| `CatalogApplicationModule` + `CatalogController` + `ChapterReadingController` (Fases B–D) | **Feito** (`GET /chapters/:id` com JWT opcional; acesso por `public` / `coin` + unlock) |
 | `ListsApplicationModule` + rotas `users/me/lists` (Fase E) | **Feito** |
 | `ProgressApplicationModule` + `GET/PATCH .../reading-progress` (Fase F) | **Feito** |
 | Fase G (E2E, `docs/API-ROTAS-MVP.md`, CI com seed, catálogo sem `coin`) | **Feito** |
@@ -125,14 +125,14 @@ npm run db:seed             # plano gratuito
 
 ---
 
-### Fase D — Acesso (limite semanal) (P0) — CONCLUÍDA
+### Fase D — Acesso à leitura (`public` / `coin`) (P0) — CONCLUÍDA
 
 **Objetivo:** `PRODUTO-REGRAS-DE-NEGOCIO` §3.4.
 
 | # | Entrega | Detalhes | Status |
 |---|---------|----------|--------|
-| D.1 | ~~`CheckChapterAccessUseCase`~~ | Entrada: `userId`, `role`, `chapterId`, `accessLevel`. Saída: `allowed`, `reason`. VIP/ADMIN/MODERATOR → liberado; plano ilimitado → liberado; `coin` → bloqueado no MVP (`coin_chapter_not_available`); senão cota por `UserChapterWeekAccess` + `weekStart` (segunda UTC). | **Feito** |
-| D.2 | ~~`ConsumeWeeklyChapterAccessUseCase`~~ | Capítulo `public` + idempotência `(userId, chapterId, weekStart)`. | **Feito** |
+| D.1 | ~~`CheckChapterAccessUseCase`~~ | Entrada: `userId`, `role`, `chapterId`, `accessLevel`. Saída: `allowed`, `reason`. VIP/ADMIN/MODERATOR → liberado; `public` → liberado; `coin` → liberado só com `UserChapterCoinUnlock`; senão `coin_chapter_not_unlocked`. | **Feito** |
+| D.2 | ~~Cota semanal~~ | Removida do produto: sem `ConsumeWeeklyChapterAccessUseCase` nem limite por `UserChapterWeekAccess` na leitura. | **Alterado** |
 | D.3 | ~~Integração em `GetChapterForReadingUseCase`~~ | JWT obrigatório em `GET /chapters/:id`; 403 `ForbiddenError` + `reason` no filtro global. | **Feito** |
 | D.4 | Ajuste de listagens | `GET /users/me/access-summary` / `isUnlocked` nas listagens — **opcional, não feito**. | Opcional |
 
@@ -177,7 +177,7 @@ npm run db:seed             # plano gratuito
 | G.1 | ~~E2E~~ | `test/mvp-flow.e2e-spec.ts`: `ensureMvpFixtures` no `beforeAll` → registro → listagem → slug → capítulos → `GET /chapters/:id` com JWT; `test/app.e2e-spec.ts` health; `test/create-e2e-app.ts` + filtro de domínio. `prisma/mvp-fixtures.ts` compartilhado com `db:seed`. | **Feito** |
 | G.2 | ~~Documentação~~ | `docs/API-ROTAS-MVP.md` (tabela de rotas + G.4); README com MVP, link e `test:e2e`. | **Feito** |
 | G.3 | ~~CI~~ | `.github/workflows/ci.yml`: lint, unit, build; job e2e com Postgres, `migrate deploy`, **`npm run db:seed`**, `test:e2e`. | **Feito** |
-| G.4 | ~~Decisão `coin`~~ | **Listagem/preview:** só `public` (`PrismaChapterRepository.listByMangaSlug`, detalhe mangá). **Leitura:** 403 `coin_chapter_not_available` (já na Fase D). | **Feito** |
+| G.4 | ~~Decisão `coin`~~ | **Listagem/preview:** só `public` (`PrismaChapterRepository.listByMangaSlug`, detalhe mangá). **Leitura:** 403 `coin_chapter_not_unlocked` sem desbloqueio. | **Feito** |
 
 ---
 

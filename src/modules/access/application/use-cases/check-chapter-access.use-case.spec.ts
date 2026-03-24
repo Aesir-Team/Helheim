@@ -1,63 +1,62 @@
 import {
   CheckChapterAccessUseCase,
-  CHAPTER_ACCESS_REASON_COIN_NOT_AVAILABLE,
-  CHAPTER_ACCESS_REASON_WEEKLY_LIMIT,
+  CHAPTER_ACCESS_REASON_COIN_NOT_UNLOCKED,
 } from './check-chapter-access.use-case';
-import type { GetEffectivePlanUseCase } from './get-effective-plan.use-case';
-import type { EffectivePlanOutput } from './get-effective-plan.use-case';
-import type { WeeklyChapterAccessRepositoryPort } from '../ports/weekly-chapter-access.repository.port';
+import type { ChapterCoinUnlockRepositoryPort } from '../ports/chapter-coin-unlock.repository.port';
 
 describe('CheckChapterAccessUseCase', () => {
   const chapterId = 'ch-1';
   const userId = 'user-1';
 
   function makeSut(overrides?: {
-    plan?: Partial<EffectivePlanOutput>;
-    week?: Partial<WeeklyChapterAccessRepositoryPort>;
+    coin?: Partial<ChapterCoinUnlockRepositoryPort>;
   }) {
-    const planResult = {
-      planSlug: 'gratuito',
-      planName: 'Gratuito',
-      freeChaptersPerWeek: 2,
-      isUnlimited: false,
-      ...overrides?.plan,
+    const coinUnlockRepo: ChapterCoinUnlockRepositoryPort = {
+      hasUnlock: jest.fn().mockResolvedValue(false),
+      ...overrides?.coin,
     };
 
-    const getEffectivePlan = {
-      execute: jest.fn().mockResolvedValue(planResult),
-    } as unknown as GetEffectivePlanUseCase;
-
-    const weekAccessRepo: WeeklyChapterAccessRepositoryPort = {
-      existsForUserChapterWeek: jest.fn().mockResolvedValue(false),
-      countDistinctChaptersForWeek: jest.fn().mockResolvedValue(0),
-      createIfNotExists: jest.fn(),
-      ...overrides?.week,
-    };
-
-    const sut = new CheckChapterAccessUseCase(getEffectivePlan, weekAccessRepo);
-    return { sut, getEffectivePlan, weekAccessRepo };
+    const sut = new CheckChapterAccessUseCase(coinUnlockRepo);
+    return { sut, coinUnlockRepo };
   }
 
   describe('Given role privilegiada (VIP)', () => {
-    it('should allow without consultar plano ou contagem', async () => {
-      const { sut, getEffectivePlan, weekAccessRepo } = makeSut();
+    it('should allow without consultar desbloqueio', async () => {
+      const { sut, coinUnlockRepo } = makeSut();
 
       const out = await sut.execute({
         userId,
         role: 'VIP',
         chapterId,
+        accessLevel: 'coin',
+      });
+
+      expect(out).toEqual({ allowed: true });
+      expect(coinUnlockRepo.hasUnlock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Given capítulo public', () => {
+    it('should allow USER sem limite semanal nem plano', async () => {
+      const { sut, coinUnlockRepo } = makeSut();
+
+      const out = await sut.execute({
+        userId,
+        role: 'USER',
+        chapterId,
         accessLevel: 'public',
       });
 
       expect(out).toEqual({ allowed: true });
-      expect(getEffectivePlan.execute).not.toHaveBeenCalled();
-      expect(weekAccessRepo.existsForUserChapterWeek).not.toHaveBeenCalled();
+      expect(coinUnlockRepo.hasUnlock).not.toHaveBeenCalled();
     });
   });
 
-  describe('Given capítulo coin (MVP bloqueado)', () => {
-    it('should deny with coin_chapter_not_available', async () => {
-      const { sut, getEffectivePlan } = makeSut();
+  describe('Given capítulo coin', () => {
+    it('should deny com coin_chapter_not_unlocked quando não há desbloqueio', async () => {
+      const { sut, coinUnlockRepo } = makeSut({
+        coin: { hasUnlock: jest.fn().mockResolvedValue(false) },
+      });
 
       const out = await sut.execute({
         userId,
@@ -68,106 +67,27 @@ describe('CheckChapterAccessUseCase', () => {
 
       expect(out).toMatchObject({
         allowed: false,
-        reasonCode: CHAPTER_ACCESS_REASON_COIN_NOT_AVAILABLE,
+        reasonCode: CHAPTER_ACCESS_REASON_COIN_NOT_UNLOCKED,
       });
       if (!out.allowed) {
         expect(out.message.length).toBeGreaterThan(0);
       }
-      expect(getEffectivePlan.execute).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Given plano ilimitado', () => {
-    it('should allow capítulo public', async () => {
-      const { sut, weekAccessRepo } = makeSut({
-        plan: {
-          freeChaptersPerWeek: null,
-          isUnlimited: true,
-        },
-      });
-
-      const out = await sut.execute({
-        userId,
-        role: 'USER',
-        chapterId,
-        accessLevel: 'public',
-      });
-
-      expect(out).toEqual({ allowed: true });
-      expect(
-        weekAccessRepo.countDistinctChaptersForWeek,
-      ).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Given usuário já abriu o mesmo capítulo na semana atual', () => {
-    it('should allow mesmo se cota semanal cheia', async () => {
-      const { sut, weekAccessRepo } = makeSut({
-        plan: { freeChaptersPerWeek: 1, isUnlimited: false },
-        week: {
-          existsForUserChapterWeek: jest.fn().mockResolvedValue(true),
-          countDistinctChaptersForWeek: jest.fn().mockResolvedValue(99),
-        },
-      });
-
-      const out = await sut.execute({
-        userId,
-        role: 'USER',
-        chapterId,
-        accessLevel: 'public',
-      });
-
-      expect(out).toEqual({ allowed: true });
-      expect(
-        weekAccessRepo.countDistinctChaptersForWeek,
-      ).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Given cota semanal e capítulo public novo na semana', () => {
-    it('should allow quando uso < limite', async () => {
-      const { sut, weekAccessRepo } = makeSut({
-        plan: { freeChaptersPerWeek: 3, isUnlimited: false },
-        week: {
-          existsForUserChapterWeek: jest.fn().mockResolvedValue(false),
-          countDistinctChaptersForWeek: jest.fn().mockResolvedValue(2),
-        },
-      });
-
-      const out = await sut.execute({
-        userId,
-        role: 'USER',
-        chapterId,
-        accessLevel: 'public',
-      });
-
-      expect(out).toEqual({ allowed: true });
-      expect(weekAccessRepo.countDistinctChaptersForWeek).toHaveBeenCalled();
+      expect(coinUnlockRepo.hasUnlock).toHaveBeenCalledWith(userId, chapterId);
     });
 
-    it('should deny quando uso >= limite', async () => {
+    it('should allow quando existe UserChapterCoinUnlock', async () => {
       const { sut } = makeSut({
-        plan: { freeChaptersPerWeek: 3, isUnlimited: false },
-        week: {
-          existsForUserChapterWeek: jest.fn().mockResolvedValue(false),
-          countDistinctChaptersForWeek: jest.fn().mockResolvedValue(3),
-        },
+        coin: { hasUnlock: jest.fn().mockResolvedValue(true) },
       });
 
       const out = await sut.execute({
         userId,
         role: 'USER',
         chapterId,
-        accessLevel: 'public',
+        accessLevel: 'coin',
       });
 
-      expect(out).toMatchObject({
-        allowed: false,
-        reasonCode: CHAPTER_ACCESS_REASON_WEEKLY_LIMIT,
-      });
-      if (!out.allowed) {
-        expect(out.message).toContain('3');
-      }
+      expect(out).toEqual({ allowed: true });
     });
   });
 });

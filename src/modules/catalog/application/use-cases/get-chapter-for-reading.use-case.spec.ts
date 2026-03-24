@@ -8,7 +8,6 @@ import {
   ForbiddenError,
 } from '../../../../shared/domain/errors';
 import type { CheckChapterAccessUseCase } from '../../../access/application/use-cases/check-chapter-access.use-case';
-import type { ConsumeWeeklyChapterAccessUseCase } from '../../../access/application/use-cases/consume-weekly-chapter-access.use-case';
 import type { SaveReadingProgressUseCase } from '../../../progress/application/use-cases/save-reading-progress.use-case';
 
 const DETAIL: ChapterDetailDto = {
@@ -57,16 +56,12 @@ describe('GetChapterForReadingUseCase', () => {
       const checkChapterAccess = {
         execute: jest.fn(),
       } as unknown as CheckChapterAccessUseCase;
-      const consumeWeeklyChapterAccess = {
-        execute: jest.fn(),
-      } as unknown as ConsumeWeeklyChapterAccessUseCase;
       const saveReadingProgress = {
         execute: jest.fn(),
       } as unknown as SaveReadingProgressUseCase;
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
-        consumeWeeklyChapterAccess,
         saveReadingProgress,
       );
 
@@ -90,20 +85,16 @@ describe('GetChapterForReadingUseCase', () => {
       const checkChapterAccess = {
         execute: jest.fn().mockResolvedValue({
           allowed: false,
-          reasonCode: 'weekly_chapter_limit_exceeded',
-          message: 'Limite atingido',
+          reasonCode: 'coin_chapter_not_unlocked',
+          message: 'Desbloqueie antes de ler',
         }),
       } as unknown as CheckChapterAccessUseCase;
-      const consumeWeeklyChapterAccess = {
-        execute: jest.fn(),
-      } as unknown as ConsumeWeeklyChapterAccessUseCase;
       const saveReadingProgress = {
         execute: jest.fn(),
       } as unknown as SaveReadingProgressUseCase;
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
-        consumeWeeklyChapterAccess,
         saveReadingProgress,
       );
 
@@ -123,16 +114,15 @@ describe('GetChapterForReadingUseCase', () => {
       } catch (e: unknown) {
         expect(e).toBeInstanceOf(ForbiddenError);
         const fe = e as ForbiddenError;
-        expect(fe.reasonCode).toBe('weekly_chapter_limit_exceeded');
-        expect(fe.message).toBe('Limite atingido');
+        expect(fe.reasonCode).toBe('coin_chapter_not_unlocked');
+        expect(fe.message).toBe('Desbloqueie antes de ler');
       }
-      expect(consumeWeeklyChapterAccess.execute).not.toHaveBeenCalled();
       expect(saveReadingProgress.execute).not.toHaveBeenCalled();
     });
   });
 
   describe('Given capítulo publicado com páginas e acesso permitido', () => {
-    it('should consume, return detail with pages ordenadas e vizinhos', async () => {
+    it('should return detail with pages ordenadas e vizinhos e gravar progresso', async () => {
       const repo = makeRepo({
         findById: jest.fn().mockResolvedValue(DETAIL),
         findNeighborChapterIds: jest.fn().mockResolvedValue({
@@ -143,9 +133,6 @@ describe('GetChapterForReadingUseCase', () => {
       const checkChapterAccess = {
         execute: jest.fn().mockResolvedValue({ allowed: true }),
       } as unknown as CheckChapterAccessUseCase;
-      const consumeWeeklyChapterAccess = {
-        execute: jest.fn().mockResolvedValue('created'),
-      } as unknown as ConsumeWeeklyChapterAccessUseCase;
       const saveReadingProgress = {
         execute: jest.fn().mockResolvedValue({
           id: 'rp1',
@@ -160,7 +147,6 @@ describe('GetChapterForReadingUseCase', () => {
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
-        consumeWeeklyChapterAccess,
         saveReadingProgress,
       );
 
@@ -182,11 +168,6 @@ describe('GetChapterForReadingUseCase', () => {
         chapterId: 'ch-2',
         accessLevel: 'public',
       });
-      expect(consumeWeeklyChapterAccess.execute).toHaveBeenCalledWith({
-        userId: 'u1',
-        chapterId: 'ch-2',
-        accessLevel: 'public',
-      });
       expect(saveReadingProgress.execute).toHaveBeenCalledWith({
         userId: 'u1',
         mangaId: 'm1',
@@ -198,7 +179,7 @@ describe('GetChapterForReadingUseCase', () => {
   });
 
   describe('Given visitante (sem usuário) e capítulo public', () => {
-    it('should return páginas e vizinhos sem check, consume nem progresso', async () => {
+    it('should return páginas e vizinhos sem check, nem progresso', async () => {
       const repo = makeRepo({
         findById: jest.fn().mockResolvedValue(DETAIL),
         findNeighborChapterIds: jest.fn().mockResolvedValue({
@@ -209,16 +190,12 @@ describe('GetChapterForReadingUseCase', () => {
       const checkChapterAccess = {
         execute: jest.fn(),
       } as unknown as CheckChapterAccessUseCase;
-      const consumeWeeklyChapterAccess = {
-        execute: jest.fn(),
-      } as unknown as ConsumeWeeklyChapterAccessUseCase;
       const saveReadingProgress = {
         execute: jest.fn(),
       } as unknown as SaveReadingProgressUseCase;
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
-        consumeWeeklyChapterAccess,
         saveReadingProgress,
       );
 
@@ -229,7 +206,6 @@ describe('GetChapterForReadingUseCase', () => {
         { pageNumber: 2, imageUrl: 'https://b.jpg' },
       ]);
       expect(checkChapterAccess.execute).not.toHaveBeenCalled();
-      expect(consumeWeeklyChapterAccess.execute).not.toHaveBeenCalled();
       expect(saveReadingProgress.execute).not.toHaveBeenCalled();
     });
   });
@@ -248,16 +224,12 @@ describe('GetChapterForReadingUseCase', () => {
       const checkChapterAccess = {
         execute: jest.fn(),
       } as unknown as CheckChapterAccessUseCase;
-      const consumeWeeklyChapterAccess = {
-        execute: jest.fn(),
-      } as unknown as ConsumeWeeklyChapterAccessUseCase;
       const saveReadingProgress = {
         execute: jest.fn(),
       } as unknown as SaveReadingProgressUseCase;
       const sut = new GetChapterForReadingUseCase(
         repo,
         checkChapterAccess,
-        consumeWeeklyChapterAccess,
         saveReadingProgress,
       );
 

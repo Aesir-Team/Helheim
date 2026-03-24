@@ -5,19 +5,15 @@ export class ChapterAccessForbiddenResponseDto {
   statusCode!: number;
 
   @ApiProperty({
-    example: 'Limite de 5 capítulo(s) distinto(s) por semana atingido.',
+    example: 'Este capítulo exige desbloqueio com coins. Desbloqueie antes de ler.',
   })
   message!: string;
 
   @ApiProperty({
     description:
-      'Motivo estável para o cliente (ex.: limite semanal, capítulo por coins no MVP ou login obrigatório para coin).',
-    example: 'weekly_chapter_limit_exceeded',
-    enum: [
-      'weekly_chapter_limit_exceeded',
-      'coin_chapter_not_available',
-      'authentication_required',
-    ],
+      'Motivo estável para o cliente (ex.: capítulo coin sem desbloqueio ou login obrigatório).',
+    example: 'coin_chapter_not_unlocked',
+    enum: ['coin_chapter_not_unlocked', 'authentication_required'],
   })
   reason!: string;
 }

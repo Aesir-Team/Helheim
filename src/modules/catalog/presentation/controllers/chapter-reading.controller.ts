@@ -33,9 +33,9 @@ export class ChapterReadingController {
   @ApiOperation({
     summary: 'Capítulo para leitura (páginas + prev/next)',
     description:
-      'Capítulos **public** (faixa grátis): podem ser lidos **sem JWT**; não consomem cota semanal nem gravam progresso no servidor. ' +
-      'Com **JWT**, aplica limite semanal do plano gratuito; roles VIP/ADMIN/MODERATOR e planos ilimitados ficam liberados. ' +
-      'Capítulos **coin** exigem login (403 `authentication_required` sem token); com token, 403 `coin_chapter_not_available` no MVP até o fluxo de coins. ' +
+      'Capítulos **public** (faixa grátis): podem ser lidos **sem JWT**; leitura gratuita não envolve coins. Sem JWT não grava progresso no servidor; com **JWT** grava progresso, sem limite semanal. ' +
+      'Roles VIP/ADMIN/MODERATOR ignoram o bloqueio por coin. ' +
+      'Capítulos **coin** exigem login (403 `authentication_required` sem token); com token, exige desbloqueio prévio (403 `coin_chapter_not_unlocked` se ainda não desbloqueado). ' +
       'Se enviar `Authorization: Bearer` inválido → 401. ' +
       'Com usuário autenticado e acesso concedido, grava progresso (capítulo atual, página 1); falha ao gravar não impede a resposta.',
   })

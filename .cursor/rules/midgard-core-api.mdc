@@ -60,16 +60,16 @@ Seguir sempre os documentos `docs/PRODUTO-REGRAS-DE-NEGOCIO.md`, `docs/PLANO-MVP
 
 - **Sempre** buscar mangá/capítulo no **banco primeiro**. Fonte de verdade = nosso BD.
 - **GET /mangas/:slug:** `MangaRepositoryPort.findBySlug(slug)`. Se encontrou → retornar e, em background (1x/dia), se `lastSyncedAt` antigo e `syncStatus === 'idle'`, disparar `SyncMangaFromSourceUseCase`. Se não encontrou → chamar `SyncMangaFromSourceUseCase` (scrape, persistir), retornar mangá ou 404.
-- **GET /chapters/:id:** Buscar capítulo + páginas; chamar `CheckChapterAccessUseCase`; se permitido, `ConsumeWeeklyChapterAccessUseCase` e retornar conteúdo; senão 403.
+- **GET /chapters/:id:** Buscar capítulo + páginas; chamar `CheckChapterAccessUseCase` (`public` liberado; `coin` com `UserChapterCoinUnlock` ou papel privilegiado); se permitido, retornar conteúdo; senão 403.
 - Sync **nunca** na thread da request; usar fila ou ao menos `setImmediate`/job em background.
 
 ---
 
 ## 7. Acesso (ler/baixar capítulo)
 
-- **CheckChapterAccess:** plano (limite semanal vs ilimitado), contagem de `UserChapterWeekAccess` na semana; se capítulo `accessLevel === coin`, verificar `UserChapterCoinUnlock` ou saldo (`User.coinsBalance` + `Chapter.coinCost`).
-- **Consume:** criar `UserChapterWeekAccess` (idempotente por userId+chapterId+weekStart) ou, se unlock por coins, debitar e criar `UserChapterCoinUnlock` + `CoinTransaction` (type `chapter_unlock`).
-- Bloquear leitura/download quando limite semanal atingido ou capítulo coin sem desbloqueio/saldo.
+- **CheckChapterAccess:** `public` → permitir; `coin` → permitir se `UserChapterCoinUnlock` ou papel privilegiado; senão 403 `coin_chapter_not_unlocked`.
+- **Desbloqueio por coins (endpoint dedicado):** débito atômico + `UserChapterCoinUnlock` + `CoinTransaction` (type `chapter_unlock`); leitura gratuita (`public`) não credita nem debita coins neste fluxo.
+- Bloquear leitura quando capítulo `coin` sem desbloqueio (saldo é validado no use case de unlock, não na leitura).
 
 ---
 
@@ -95,8 +95,8 @@ Seguir sempre os documentos `docs/PRODUTO-REGRAS-DE-NEGOCIO.md`, `docs/PLANO-MVP
 
 ## 10. Consistência e segurança
 
-- **Transações:** operações que tocam mais de uma entidade (ex.: consumir acesso + criar WeekAccess + atualizar ReadingProgress) em transação Prisma.
-- **Idempotência:** ConsumeWeeklyChapterAccess, ad-reward e “registrar progresso” idempotentes (unique + upsert).
+- **Transações:** operações que tocam mais de uma entidade (ex.: unlock por coins + saldo + `CoinTransaction`) em transação Prisma.
+- **Idempotência:** ad-reward e “registrar progresso” idempotentes (unique + upsert); desbloqueio por coins conforme regra do use case.
 - **Auth:** JWT em guard; em todo use case que recebe `userId`, validar que o recurso pertence ao usuário (listas, progresso, coins).
 - **Webhooks/pagamentos:** sempre usar `idempotencyKey` para evitar processar o mesmo evento duas vezes.
 - **Invariantes sem constraint no BD (validar no use case):**

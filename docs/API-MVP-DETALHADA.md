@@ -29,7 +29,7 @@ Authorization: Bearer <token>
 
 O token é emitido em **`POST /auth/register`** e **`POST /auth/login`**. O payload inclui `sub` (user id), `email` e **`role`** (`USER` | `VIP` | `ADMIN` | `MODERATOR`). Tokens antigos sem `role` são tratados como `USER` no guard.
 
-**Papéis com leitura sem cota semanal no catálogo:** `VIP`, `ADMIN`, `MODERATOR` (ver use case de acesso ao capítulo).
+**Papéis que ignoram bloqueio por coin na leitura:** `VIP`, `ADMIN`, `MODERATOR` (ver `CheckChapterAccessUseCase`).
 
 ---
 
@@ -39,7 +39,7 @@ O token é emitido em **`POST /auth/register`** e **`POST /auth/login`**. O payl
 |----------|------|----------------|
 | Validação de DTO (class-validator) | **400** | `{ statusCode, message, error }` (Nest) |
 | Token ausente / inválido (guard) | **401** | Mensagem Nest |
-| Acesso ao capítulo negado (cota / coin) | **403** | `{ statusCode, message, reason }` — `reason` pode ser `weekly_chapter_limit_exceeded` ou `coin_chapter_not_available` |
+| Acesso ao capítulo negado (coin sem desbloqueio) | **403** | `{ statusCode, message, reason }` — `reason` pode ser `coin_chapter_not_unlocked` ou `authentication_required` (coin sem JWT) |
 | Recurso de domínio inexistente (`NotFoundError`) | **404** | `{ statusCode, message }` |
 | Conflito de negócio (`ConflictError`) — email duplicado, mangá já na lista, etc. | **409** | `{ statusCode, message }` |
 | Registro com email em uso | **409** | Via `ConflictException` no controller de auth |
@@ -172,17 +172,15 @@ Para obter **páginas** de leitura e prev/next, use o `id` de cada item em `GET 
 
 | | |
 |--|--|
-| **Auth** | **Opcional** — capítulos **`public`** (faixa grátis): leitura **sem JWT**; **`coin`**: exige JWT (senão **403** `authentication_required`). Com JWT válido, aplica cota / regras de plano. |
+| **Auth** | **Opcional** — capítulos **`public`** (faixa grátis): leitura **sem JWT**; **`coin`**: exige JWT (senão **403** `authentication_required`). Com JWT válido: **`public`** liberado; **`coin`** só se existir `UserChapterCoinUnlock` (senão **403** `coin_chapter_not_unlocked`). |
 | **200** | Metadados do capítulo, `pages` ordenadas, `prevChapterId`, `nextChapterId` (entre capítulos publicados) |
 | **401** | Header `Authorization: Bearer` **presente** mas token inválido ou expirado |
-| **403** | `coin` sem login (`reason: authentication_required`); com JWT: limite semanal excedido ou capítulo **`coin`** no MVP (`reason: coin_chapter_not_available`) |
+| **403** | `coin` sem login (`reason: authentication_required`); com JWT: capítulo **`coin`** sem desbloqueio (`reason: coin_chapter_not_unlocked`) |
 | **404** | Capítulo inexistente / não publicado / soft-deleted |
 
-**Visitante (sem JWT)** em capítulo **`public`**: não consome cota semanal nem grava progresso no servidor.
+**Visitante (sem JWT)** em capítulo **`public`**: não grava progresso no servidor; leitura gratuita **não** envolve coins.
 
-**Usuário autenticado** em capítulo **`public`**: após checagem de acesso, consome cota de forma idempotente por `(usuário, capítulo, semana ISO UTC)`.
-
-Após **consumo** bem-sucedido (fluxo autenticado), o servidor grava progresso como no `PATCH` de leitura (`chapterId` atual, `pageNumber: 1`). Falha ao gravar progresso **não** altera o **200** da leitura.
+**Usuário autenticado** em capítulo **`public`**: após checagem de acesso (sempre permitida para `USER`), o servidor grava progresso como no `PATCH` de leitura (`chapterId` atual, `pageNumber: 1`). Falha ao gravar progresso **não** altera o **200** da leitura.
 
 ---
 
@@ -191,7 +189,7 @@ Após **consumo** bem-sucedido (fluxo autenticado), o servidor grava progresso c
 - **Listagem** `GET /mangas/:slug/chapters`: capítulos **publicados** (`public` e `coin`) em **paginação** (`page`, `limit`, `order`); `isLocked` para UX; ordenação natural por `number`.
 - **Por número** `GET /mangas/:slug/chapters/by-number/:number`: a partir do capítulo com aquele `number`, lista **asc** paginada (deep link + scroll); leitura com imagens em `GET /chapters/:id`.
 - **Preview no detalhe** (`chaptersCount`, `latestChapters`): só **amostra** recente no JSON do mangá; lista completa = endpoint paginado acima.
-- **Leitura** `GET /chapters/:id`: capítulo **`coin`** **sem JWT** → **403** `reason: authentication_required`; **com JWT** → **403** `reason: coin_chapter_not_available` até existir fluxo de coins.
+- **Leitura** `GET /chapters/:id`: capítulo **`coin`** **sem JWT** → **403** `reason: authentication_required`; **com JWT** → **403** `reason: coin_chapter_not_unlocked` se não houver desbloqueio (fluxo de débito/unlock em endpoint separado).
 
 Detalhe curto: [`API-ROTAS-MVP.md` § Decisão G.4](./API-ROTAS-MVP.md).
 
