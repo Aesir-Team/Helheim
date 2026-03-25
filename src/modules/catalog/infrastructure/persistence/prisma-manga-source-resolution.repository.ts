@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PUBLIC_CATALOG_EXTERNAL_SOURCE_PREDICATE } from '../../../../shared/domain/public-catalog-source.policy';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import type {
   MangaExternalSourceCandidate,
@@ -54,6 +55,9 @@ export class PrismaMangaSourceResolutionRepository implements MangaSourceResolut
         externalId: true,
         preferredSourceId: true,
         externalSources: {
+          ...(input.userId == null
+            ? { where: { ...PUBLIC_CATALOG_EXTERNAL_SOURCE_PREDICATE } }
+            : {}),
           select: {
             id: true,
             provider: true,

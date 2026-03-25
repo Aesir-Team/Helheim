@@ -15,7 +15,9 @@ import type {
   MangaType,
   MangaStatus,
   CategoryType,
+  Prisma,
 } from '@prisma/client';
+import { mangaPublicCatalogVisibilityWhere } from '../../../../shared/domain/public-catalog-source.policy';
 import {
   normalizeMangaStatusFromExternal,
   normalizeMangaTypeFromExternal,
@@ -26,9 +28,21 @@ import { resolveMangaChaptersDisplayCount } from '../../../../shared/domain/mang
 export class PrismaMangaRepository implements MangaRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Catálogo público (listagem, detalhe público): exclui mangás que só existem
+   * no hub via fontes user-scoped / não elegíveis a discovery global.
+   */
+  private withPublicCatalogScope(
+    base: Prisma.MangaWhereInput,
+  ): Prisma.MangaWhereInput {
+    return {
+      AND: [base, mangaPublicCatalogVisibilityWhere()],
+    };
+  }
+
   async findBySlug(slug: string): Promise<MangaDetailDto | null> {
     const row = await this.prisma.manga.findFirst({
-      where: { slug, deletedAt: null },
+      where: this.withPublicCatalogScope({ slug, deletedAt: null }),
       include: {
         categories: { include: { category: true } },
         chapters: {
@@ -125,19 +139,27 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
   async list(
     params: ListMangasParams,
   ): Promise<PaginatedResult<MangaSummaryDto>> {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const filters: Prisma.MangaWhereInput[] = [{ deletedAt: null }];
 
-    if (params.type) where.type = params.type as MangaType;
-    if (params.status) where.status = params.status as MangaStatus;
-    if (params.includeNsfw !== true) where.isNsfw = false;
+    if (params.type) filters.push({ type: params.type as MangaType });
+    if (params.status) filters.push({ status: params.status as MangaStatus });
+    if (params.includeNsfw !== true) filters.push({ isNsfw: false });
     if (params.search) {
-      where.title = { contains: params.search, mode: 'insensitive' };
+      filters.push({
+        title: { contains: params.search, mode: 'insensitive' },
+      });
     }
     if (params.categorySlug) {
-      where.categories = {
-        some: { category: { slug: params.categorySlug } },
-      };
+      filters.push({
+        categories: {
+          some: { category: { slug: params.categorySlug } },
+        },
+      });
     }
+
+    filters.push(mangaPublicCatalogVisibilityWhere());
+
+    const where: Prisma.MangaWhereInput = { AND: filters };
 
     const orderBy: Record<string, string> = {};
     const sortKey = params.sortBy ?? 'lastChapterAt';
@@ -192,11 +214,11 @@ export class PrismaMangaRepository implements MangaRepositoryPort {
     }
 
     const rows = await this.prisma.manga.findMany({
-      where: {
+      where: this.withPublicCatalogScope({
         deletedAt: null,
         slug: { in: slugs },
         ...(includeNsfw === true ? {} : { isNsfw: false }),
-      },
+      }),
       include: { categories: { include: { category: true } } },
     });
 

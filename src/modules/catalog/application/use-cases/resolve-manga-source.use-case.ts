@@ -1,6 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MangaSourceUnavailableError } from '../../../../shared/domain/errors';
 import {
+  isEligibleForPublicCatalogSource,
+  isUserScopedSourceOwnedByActor,
+} from '../../../../shared/domain/public-catalog-source.policy';
+import {
   MANGA_SOURCE_RESOLUTION_LOAD_PORT,
   type MangaExternalSourceCandidate,
   type MangaSourceResolutionLoadPort,
@@ -58,13 +62,13 @@ function isGlobalEligibleForContext(
   if (row.isUserScoped) {
     return false;
   }
-  if (!row.isActive || !row.isFallbackEnabled) {
+  if (!row.isFallbackEnabled) {
     return false;
   }
-  if (context.kind === 'public' && !row.isPublicEligible) {
-    return false;
+  if (context.kind === 'public') {
+    return isEligibleForPublicCatalogSource(row);
   }
-  return true;
+  return row.isActive;
 }
 
 function isUserScopedVisibleToViewer(
@@ -72,18 +76,11 @@ function isUserScopedVisibleToViewer(
   context: ResolveMangaSourceUserContext,
   installationId: string | null | undefined,
 ): boolean {
-  if (row.ownerUserId != null && row.ownerUserId === context.userId) {
-    return true;
-  }
-  if (
-    installationId != null &&
-    installationId !== '' &&
-    row.ownerInstallationId != null &&
-    row.ownerInstallationId === installationId
-  ) {
-    return true;
-  }
-  return false;
+  return isUserScopedSourceOwnedByActor({
+    row,
+    actorUserId: context.userId,
+    installationId,
+  });
 }
 
 function pickPreferred(
