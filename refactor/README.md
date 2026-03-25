@@ -11,6 +11,7 @@ Este diretório organiza o refactor para evoluir o backend sem quebrar o runtime
 - `PLANO-REFATORACAO-COMPLETO.md` — **plano final revisado**: decisões fechadas, épicos **0–11** (inclui **1.5** backfill e **11** compatibilidade transitória), ordem de leitura, sprints e critérios de aceite
 
 ## Complementos
+- [`docs/RUNTIME-VIGENTE-MVP.md`](../docs/RUNTIME-VIGENTE-MVP.md) — comportamento operacional congelado (Fase 0)
 - `tickets.md` — tickets macro para execução incremental
 - `risks.md` — riscos e mitigação
 

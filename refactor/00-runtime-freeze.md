@@ -1,5 +1,7 @@
 # Fase 0 — Congelar o runtime atual
 
+**Status:** entregue (documentação + E2E de regressão).
+
 ## Objetivo
 Impedir regressão enquanto a base estrutural muda.
 
@@ -14,14 +16,14 @@ Nesta fase, o foco é **documentar e testar o comportamento vigente**, não muda
 - Bearer inválido nas rotas opcionais retorna 401 (padrão atual)
 - progresso automático ao abrir capítulo autenticado (falha não bloqueia resposta)
 
-## Entregas
-- Documentar explicitamente o comportamento vigente (links para docs/rotas atuais)
-- Reforçar testes nos fluxos sensíveis:
-  - `GET /mangas/:slug`
-  - `GET /mangas/:slug/chapters`
-  - `GET /chapters/:id`
+## Entregas (feitas)
+- **Documentação:** [`docs/RUNTIME-VIGENTE-MVP.md`](../docs/RUNTIME-VIGENTE-MVP.md) — tabela de rotas, weekly quota fora do runtime, links para `API-ROTAS-MVP`, `API-MVP-DETALHADA`, `PLANO-MVP`.
+- **Testes E2E:** `test/mvp-flow.e2e-spec.ts` — fluxo existente + casos adicionais:
+  - `GET /mangas/:slug` com Bearer inválido → 401
+  - `GET /mangas/:slug/chapters` com Bearer inválido → 401
+  - `GET /chapters/:id` em capítulo `coin` com JWT sem unlock → 403 `coin_chapter_not_unlocked`
+  - `POST /users/me/lists` + `GET /users/me/lists`
   - `PATCH /users/me/reading-progress`
-  - listas (`/users/me/lists/*`)
 
 ## Não mudar nesta fase
 - contratos HTTP

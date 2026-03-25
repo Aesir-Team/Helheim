@@ -29,3 +29,8 @@ Preparar o banco para **multi-source real** sem quebrar o que existe.
 - `MangaExternalSource` vira o hub real
 - o sistema passa a suportar source global e source privada (user-scoped) **sem misturar** com catálogo público
 
+## Status (entregue)
+- Schema: `prisma/schema.prisma` (enums, campos do hub, `preferredSourceId`, `UserMangaSourcePreference`, unique `@@unique([mangaId, provider, externalId])`).
+- Migration aplicável: `prisma/migrations/20260325120000_phase1_source_hub_modeling/`.
+- `npx prisma generate` e `npx prisma migrate deploy` validados no ambiente local.
+- **Próximo passo de produto:** backfill / invariantes na aplicação (`preferredSource` só source global; user-scoped fora de catálogo público) conforme épicos seguintes do plano de refactor.

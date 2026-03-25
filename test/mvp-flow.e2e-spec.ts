@@ -16,6 +16,7 @@ interface PaginatedMangasBody {
 }
 
 interface MangaDetailBody {
+  id: string;
   slug: string;
   chaptersCount: number;
 }
@@ -32,6 +33,12 @@ interface PaginatedChaptersBody {
 interface ChapterReadingBody {
   id: string;
   pages: unknown[];
+}
+
+/** Resposta de `POST /users/me/lists` (201). */
+interface UserMangaListCreateResponseBody {
+  id: string;
+  name: string;
 }
 
 /**
@@ -133,6 +140,128 @@ describe('MVP flow (e2e)', () => {
     expect(coinRead.body).toMatchObject({
       statusCode: 403,
       reason: 'authentication_required',
+    });
+  });
+
+  it('GET manga e chapters com Bearer inválido em rota JWT opcional retorna 401', async () => {
+    await request(app.getHttpServer())
+      .get(`/api/v1/mangas/${MVP_DEMO_MANGA_SLUG}`)
+      .set('Authorization', 'Bearer token-invalido')
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/mangas/${MVP_DEMO_MANGA_SLUG}/chapters`)
+      .set('Authorization', 'Bearer definitely-not-a-jwt')
+      .expect(401);
+  });
+
+  it('GET capítulo coin com JWT sem unlock retorna 403 coin_chapter_not_unlocked', async () => {
+    const email = `e2e-coin-${Date.now()}@midgard.local`;
+    const password = 'senha-e2e-12';
+
+    const reg = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        email,
+        password,
+        firstName: 'C',
+        lastName: 'O',
+        nickname: `e2e_coin_${String(Date.now())}`,
+      })
+      .expect(201);
+
+    const token = (reg.body as AuthTokenBody).token;
+
+    const chapters = await request(app.getHttpServer())
+      .get(`/api/v1/mangas/${MVP_DEMO_MANGA_SLUG}/chapters`)
+      .expect(200);
+
+    const coinChapter = (chapters.body as PaginatedChaptersBody).data.find(
+      (c) => c.accessLevel === 'coin',
+    );
+    expect(coinChapter).toBeDefined();
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/chapters/${coinChapter!.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+
+    expect(res.body).toMatchObject({
+      statusCode: 403,
+      reason: 'coin_chapter_not_unlocked',
+    });
+  });
+
+  it('POST lista + GET listas + PATCH reading-progress', async () => {
+    const email = `e2e-lib-${Date.now()}@midgard.local`;
+    const password = 'senha-e2e-12';
+
+    const reg = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        email,
+        password,
+        firstName: 'L',
+        lastName: 'B',
+        nickname: `e2e_lib_${String(Date.now())}`,
+      })
+      .expect(201);
+
+    const token = (reg.body as AuthTokenBody).token;
+
+    const createList = await request(app.getHttpServer())
+      .post('/api/v1/users/me/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Fase 0 E2E' })
+      .expect(201);
+
+    const createdList = createList.body as UserMangaListCreateResponseBody;
+    expect(createdList).toMatchObject({
+      name: 'Fase 0 E2E',
+    });
+    expect(typeof createdList.id).toBe('string');
+
+    const lists = await request(app.getHttpServer())
+      .get('/api/v1/users/me/lists')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(Array.isArray(lists.body)).toBe(true);
+    expect(
+      (lists.body as { name: string }[]).some((l) => l.name === 'Fase 0 E2E'),
+    ).toBe(true);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/mangas/${MVP_DEMO_MANGA_SLUG}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const mangaId = (detail.body as MangaDetailBody).id;
+
+    const chapters = await request(app.getHttpServer())
+      .get(`/api/v1/mangas/${MVP_DEMO_MANGA_SLUG}/chapters`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const publicChapter = (chapters.body as PaginatedChaptersBody).data.find(
+      (c) => c.accessLevel === 'public',
+    );
+    expect(publicChapter).toBeDefined();
+
+    const patch = await request(app.getHttpServer())
+      .patch('/api/v1/users/me/reading-progress')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        mangaId,
+        chapterId: publicChapter!.id,
+        pageNumber: 2,
+      })
+      .expect(200);
+
+    expect(patch.body).toMatchObject({
+      mangaId,
+      chapterId: publicChapter!.id,
+      pageNumber: 2,
     });
   });
 

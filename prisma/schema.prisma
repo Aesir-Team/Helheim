@@ -43,6 +43,8 @@ model User {
   adRewardClaims     AdRewardClaim[]
   mangaLists         UserMangaList[]
   readingProgress    ReadingProgress[]
+  ownedExternalSources       MangaExternalSource[]       @relation("UserOwnedExternalSource")
+  mangaSourcePreferences     UserMangaSourcePreference[]
   processedTakedownRequests TakedownRequest[] @relation("TakedownProcessedBy")
   takedownRequestsSubmitted TakedownRequest[]  @relation("TakedownRequester")
 
@@ -69,12 +71,26 @@ enum MangaSyncStatus {
   error
 }
 
-/// Provedor externo de dados (cada mangá pode ter N linhas em MangaExternalSource).
+/// Provedor técnico (adapter/runtime). Complementa `SourceOriginType` na governança.
 enum ExternalSourceProvider {
   NEXUSTOONS
   MANGADEX
   CUSTOM_A
   CUSTOM_B
+  /// Conteúdo / pipeline interno Midgard (oficial).
+  MIDGARD
+  KOMGA
+  LOCAL_IMPORT
+  USER_EXTENSION
+}
+
+/// Classificação de origem para elegibilidade pública vs privada (hub / parceiro / usuário).
+enum SourceOriginType {
+  official
+  partner
+  external
+  user_connected
+  local_import
 }
 
 enum CategoryType {
@@ -126,7 +142,12 @@ model Manga {
   syncStatus       MangaSyncStatus @default(idle) /// Estado global do mangá para evitar dois syncs pesados ao mesmo tempo.
   lastSyncError    String?   @db.Text /// Mensagem do último erro (se syncStatus == error).
 
-  externalSources MangaExternalSource[]
+  /// Source global preferida para este mangá (linha em `MangaExternalSource` do próprio mangá). Nunca user-scoped.
+  preferredSourceId String?
+  preferredSource   MangaExternalSource? @relation("MangaPreferredExternalSource", fields: [preferredSourceId], references: [id], onDelete: SetNull)
+
+  externalSources        MangaExternalSource[]        @relation("MangaExternalSources")
+  userSourcePreferences  UserMangaSourcePreference[]
   categories      MangaCategory[]
   chapters        Chapter[]
   listItems       UserMangaListItem[]
@@ -141,6 +162,7 @@ model Manga {
   @@index([lastSyncedAt])
   @@index([syncStatus])
   @@index([externalId])
+  @@index([preferredSourceId])
   @@map("mangas")
 }
 
@@ -155,14 +177,28 @@ model MangaCategory {
   @@map("manga_categories")
 }
 
-/// Um mesmo mangá (entidade canônica no Midgard) pode existir em várias APIs/scrapers.
-/// Cada linha = mapeamento (provider + externalId) + estado de sync isolado por fonte.
+/// Vínculo do mangá canônico a uma fonte externa (hub multi-source).
+/// Regras de produto: `isUserScoped` + `ownerUserId` / `ownerInstallationId`; `preferredSourceId` em `Manga` só pode apontar para linha global (não user-scoped).
 model MangaExternalSource {
   id            String                @id @default(uuid())
   mangaId       String
   provider      ExternalSourceProvider
   /// ID ou slug desse mangá na API do provedor.
   externalId    String
+  originType    SourceOriginType      @default(external)
+  isOfficial    Boolean               @default(false)
+  /// Elegível para catálogo público / discovery (queries globais devem filtrar).
+  isPublicEligible  Boolean           @default(true)
+  isFallbackEnabled Boolean            @default(true)
+  isUserScoped      Boolean            @default(false)
+  ownerUserId          String?
+  ownerInstallationId  String?
+  sourceName    String?
+  sourceSlug    String?
+  /// Saúde da fonte (0–1 sugerido; uso futuro na resolução).
+  healthScore   Float                 @default(1)
+  failureCount  Int                   @default(0)
+  lastSuccessAt DateTime?
   /// Maior número = tentar primeiro no sync / fallback (ex.: 100 fonte A, 50 fonte B).
   priority      Int                   @default(0)
   isActive      Boolean               @default(true)
@@ -170,14 +206,41 @@ model MangaExternalSource {
   syncStatus    MangaSyncStatus       @default(idle)
   lastSyncError String?               @db.Text
 
-  manga Manga @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+  manga         Manga    @relation("MangaExternalSources", fields: [mangaId], references: [id], onDelete: Cascade)
+  ownerUser     User?    @relation("UserOwnedExternalSource", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  preferredByManga Manga[]           @relation("MangaPreferredExternalSource")
+  userPreferences  UserMangaSourcePreference[]
 
-  /// Um mangá não repete o mesmo provedor; o par (provedor, id externo) é único no ecossistema.
-  @@unique([mangaId, provider])
-  @@unique([provider, externalId])
+  /// Permite várias linhas do mesmo `provider` por mangá (diferentes `externalId`). Não força unicidade global por provedor.
+  @@unique([mangaId, provider, externalId])
   @@index([mangaId])
   @@index([mangaId, priority])
+  @@index([isUserScoped])
+  @@index([ownerUserId])
+  @@index([ownerInstallationId])
   @@map("manga_external_sources")
+}
+
+/// Preferência de fonte por usuário e mangá (pode apontar para `MangaExternalSource` user-scoped do dono).
+model UserMangaSourcePreference {
+  id         String   @id @default(uuid())
+  userId     String
+  mangaId    String
+  sourceId   String
+  usageCount Int      @default(0)
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manga  Manga                @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+  source MangaExternalSource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mangaId])
+  @@index([userId])
+  @@index([mangaId])
+  @@index([sourceId])
+  @@map("user_manga_source_preferences")
 }
 
 // ============== Capítulos ==============
