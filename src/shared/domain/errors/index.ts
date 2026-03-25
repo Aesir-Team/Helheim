@@ -43,3 +43,12 @@ export class ForbiddenError extends DomainError {
     Object.setPrototypeOf(this, ForbiddenError.prototype);
   }
 }
+
+/** Nenhuma linha do hub elegível para sync/leitura (com linhas cadastradas). */
+export class MangaSourceUnavailableError extends DomainError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MangaSourceUnavailableError';
+    Object.setPrototypeOf(this, MangaSourceUnavailableError.prototype);
+  }
+}

@@ -12,6 +12,7 @@ import {
   type ExternalMangaGatewayPort,
   type ExternalMangaSummaryDto,
 } from '../ports/external-manga-gateway.port';
+import { ResolvePublicCatalogSourceUseCase } from './resolve-public-catalog-source.use-case';
 
 /** Máximo de itens trazidos da fonte externa por busca (evita burst). */
 const EXTERNAL_SEARCH_LIMIT_CAP = 60;
@@ -69,6 +70,7 @@ export class ListMangasUseCase {
     private readonly mangaRepo: MangaRepositoryPort,
     @Inject(EXTERNAL_MANGA_GATEWAY)
     private readonly gateway: ExternalMangaGatewayPort,
+    private readonly resolvePublicCatalogSource: ResolvePublicCatalogSourceUseCase,
   ) {}
 
   async execute(
@@ -106,6 +108,7 @@ export class ListMangasUseCase {
     );
 
     try {
+      void this.resolvePublicCatalogSource.execute();
       const items = await this.gateway.listMangas({
         search,
         limit: externalLimit,

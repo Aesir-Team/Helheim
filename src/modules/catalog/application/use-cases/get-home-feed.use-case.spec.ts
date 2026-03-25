@@ -5,6 +5,7 @@ import type {
 } from '../ports/manga.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
 import type { ListMangasParams } from '../ports/manga.repository.port';
+import { ResolvePublicCatalogSourceUseCase } from './resolve-public-catalog-source.use-case';
 
 const MANGA_STUB: MangaSummaryDto = {
   id: 'm1',
@@ -20,7 +21,9 @@ const MANGA_STUB: MangaSummaryDto = {
   categories: [{ id: 'c1', name: 'Action', slug: 'action' }],
 };
 
-function makeRepo(overrides?: Partial<MangaRepositoryPort>): MangaRepositoryPort {
+function makeRepo(
+  overrides?: Partial<MangaRepositoryPort>,
+): MangaRepositoryPort {
   return {
     findBySlug: jest.fn().mockResolvedValue(null),
     findByIdForListItem: jest.fn().mockResolvedValue(null),
@@ -62,6 +65,10 @@ function makeGateway(
   };
 }
 
+function makeResolvePublicCatalog(): ResolvePublicCatalogSourceUseCase {
+  return new ResolvePublicCatalogSourceUseCase();
+}
+
 describe('GetHomeFeedUseCase', () => {
   it('Given trending external data, should ingest and return sections from local db', async () => {
     const ratingPool: MangaSummaryDto[] = [
@@ -95,12 +102,18 @@ describe('GetHomeFeedUseCase', () => {
             totalPages: 1,
           });
         }
-        return Promise.reject(new Error(`unexpected list sortBy=${params.sortBy}`));
+        return Promise.reject(
+          new Error(`unexpected list sortBy=${params.sortBy}`),
+        );
       }),
       listBySlugs: jest.fn().mockResolvedValue([MANGA_STUB]),
     });
     const gateway = makeGateway();
-    const sut = new GetHomeFeedUseCase(repo, gateway);
+    const sut = new GetHomeFeedUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     const result = await sut.execute({ limit: 10, includeNsfw: true });
 
@@ -165,13 +178,19 @@ describe('GetHomeFeedUseCase', () => {
             totalPages: 1,
           });
         }
-        return Promise.reject(new Error(`unexpected list sortBy=${params.sortBy}`));
+        return Promise.reject(
+          new Error(`unexpected list sortBy=${params.sortBy}`),
+        );
       }),
     });
     const gateway = makeGateway({
       listTrending: jest.fn().mockRejectedValue(new Error('network')),
     });
-    const sut = new GetHomeFeedUseCase(repo, gateway);
+    const sut = new GetHomeFeedUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     const result = await sut.execute({ limit: 5 });
 
@@ -184,7 +203,6 @@ describe('GetHomeFeedUseCase', () => {
   });
 
   it('should paginate rating list until recommended reaches limit when first batch overlaps trending', async () => {
-    const trendingSlugs = new Set(['t-0', 't-1', 't-2', 't-3', 't-4', 't-5', 't-6', 't-7', 't-8', 't-9']);
     const trending: MangaSummaryDto[] = Array.from({ length: 10 }, (_, i) => ({
       ...MANGA_STUB,
       id: `t${i}`,
@@ -236,7 +254,9 @@ describe('GetHomeFeedUseCase', () => {
             totalPages: 0,
           });
         }
-        return Promise.reject(new Error(`unexpected list sortBy=${params.sortBy}`));
+        return Promise.reject(
+          new Error(`unexpected list sortBy=${params.sortBy}`),
+        );
       }),
       listBySlugs: jest.fn().mockResolvedValue(trending),
     });
@@ -250,12 +270,18 @@ describe('GetHomeFeedUseCase', () => {
         })),
       ),
     });
-    const sut = new GetHomeFeedUseCase(repo, gateway);
+    const sut = new GetHomeFeedUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     const result = await sut.execute({ limit: 10, includeNsfw: true });
 
     expect(ratingCalls).toBe(2);
     expect(result.recommended).toHaveLength(10);
-    expect(result.recommended.every((m) => m.slug.startsWith('ok-'))).toBe(true);
+    expect(result.recommended.every((m) => m.slug.startsWith('ok-'))).toBe(
+      true,
+    );
   });
 });

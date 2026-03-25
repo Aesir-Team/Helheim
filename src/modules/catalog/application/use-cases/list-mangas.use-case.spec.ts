@@ -5,6 +5,7 @@ import type {
   PaginatedResult,
 } from '../ports/manga.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
+import { ResolvePublicCatalogSourceUseCase } from './resolve-public-catalog-source.use-case';
 
 const MANGA_STUB: MangaSummaryDto = {
   id: 'm1',
@@ -56,6 +57,10 @@ function makeGateway(
   };
 }
 
+function makeResolvePublicCatalog(): ResolvePublicCatalogSourceUseCase {
+  return new ResolvePublicCatalogSourceUseCase();
+}
+
 const EXTERNAL_ITEM = {
   id: 'ext-1',
   slug: 'new-from-nexus',
@@ -80,7 +85,11 @@ describe('ListMangasUseCase', () => {
   it('should delegate to mangaRepo.list with defaults', async () => {
     const repo = makeRepo();
     const gateway = makeGateway();
-    const sut = new ListMangasUseCase(repo, gateway);
+    const sut = new ListMangasUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     const result = await sut.execute({});
 
@@ -102,7 +111,11 @@ describe('ListMangasUseCase', () => {
   it('should cap limit at 100', async () => {
     const repo = makeRepo();
     const gateway = makeGateway();
-    const sut = new ListMangasUseCase(repo, gateway);
+    const sut = new ListMangasUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     await sut.execute({ limit: 500 });
 
@@ -114,7 +127,11 @@ describe('ListMangasUseCase', () => {
   it('should forward all filter params', async () => {
     const repo = makeRepo();
     const gateway = makeGateway();
-    const sut = new ListMangasUseCase(repo, gateway);
+    const sut = new ListMangasUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     await sut.execute({
       page: 2,
@@ -142,7 +159,11 @@ describe('ListMangasUseCase', () => {
   it('should not call external gateway when search is empty or whitespace', async () => {
     const repo = makeRepo();
     const gateway = makeGateway();
-    const sut = new ListMangasUseCase(repo, gateway);
+    const sut = new ListMangasUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     await sut.execute({ search: '   ' });
 
@@ -157,7 +178,11 @@ describe('ListMangasUseCase', () => {
     const gateway = makeGateway({
       listMangas: jest.fn().mockResolvedValue([EXTERNAL_ITEM]),
     });
-    const sut = new ListMangasUseCase(repo, gateway);
+    const sut = new ListMangasUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     await sut.execute({ search: '  nexus  ', limit: 10, sortBy: 'views' });
 
@@ -185,8 +210,14 @@ describe('ListMangasUseCase', () => {
 
   it('should pass sortBy null to external when repo sort is not supported by Nexustoons', async () => {
     const repo = makeRepo();
-    const gateway = makeGateway({ listMangas: jest.fn().mockResolvedValue([]) });
-    const sut = new ListMangasUseCase(repo, gateway);
+    const gateway = makeGateway({
+      listMangas: jest.fn().mockResolvedValue([]),
+    });
+    const sut = new ListMangasUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     await sut.execute({ search: 'x', sortBy: 'rating' });
 
@@ -200,7 +231,11 @@ describe('ListMangasUseCase', () => {
     const gateway = makeGateway({
       listMangas: jest.fn().mockRejectedValue(new Error('network')),
     });
-    const sut = new ListMangasUseCase(repo, gateway);
+    const sut = new ListMangasUseCase(
+      repo,
+      gateway,
+      makeResolvePublicCatalog(),
+    );
 
     const result = await sut.execute({ search: 'fail' });
 

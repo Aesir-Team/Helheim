@@ -4,6 +4,8 @@ import type { MangaRepositoryPort } from '../ports/manga.repository.port';
 import type { ChapterRepositoryPort } from '../ports/chapter.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
 import type { MangaSyncProgressPort } from '../ports/manga-sync-progress.port';
+import { MangaSourceUnavailableError } from '../../../../shared/domain/errors';
+import { ResolveMangaSourceUseCase } from './resolve-manga-source.use-case';
 
 function makeRepo(
   overrides?: Partial<MangaRepositoryPort>,
@@ -91,12 +93,28 @@ function makeConfig(
   } as unknown as ConfigService;
 }
 
+function makeResolveMangaSource(
+  overrides?: Partial<Pick<ResolveMangaSourceUseCase, 'execute'>>,
+): ResolveMangaSourceUseCase {
+  const execute =
+    overrides?.execute ??
+    jest.fn((input: { slug: string }) =>
+      Promise.resolve({
+        kind: 'legacy_default' as const,
+        canonicalSlug: input.slug,
+        provider: 'NEXUSTOONS' as const,
+      }),
+    );
+  return { execute } as unknown as ResolveMangaSourceUseCase;
+}
+
 function makeSut(
   repo: MangaRepositoryPort,
   chapterRepo: ChapterRepositoryPort,
   gateway: ExternalMangaGatewayPort,
   progress?: MangaSyncProgressPort,
   config?: ConfigService,
+  resolveMangaSource?: ResolveMangaSourceUseCase,
 ): SyncMangaFromSourceUseCase {
   return new SyncMangaFromSourceUseCase(
     repo,
@@ -104,10 +122,42 @@ function makeSut(
     gateway,
     progress ?? makeProgress(),
     config ?? makeConfig(),
+    resolveMangaSource ?? makeResolveMangaSource(),
   );
 }
 
 describe('SyncMangaFromSourceUseCase', () => {
+  it('should set sync error when source resolution reports unavailable hub', async () => {
+    const repo = makeRepo();
+    const gateway = makeGateway();
+    const resolve = makeResolveMangaSource({
+      execute: jest
+        .fn()
+        .mockRejectedValue(
+          new MangaSourceUnavailableError('Nenhuma fonte ativa elegível'),
+        ),
+    });
+    const sut = makeSut(
+      repo,
+      makeChapterRepo(),
+      gateway,
+      undefined,
+      undefined,
+      resolve,
+    );
+
+    const result = await sut.execute('blocked-slug');
+
+    expect(result).toBeNull();
+    expect(repo.setSyncStatus).toHaveBeenCalledWith('blocked-slug', 'syncing');
+    expect(repo.setSyncStatus).toHaveBeenCalledWith(
+      'blocked-slug',
+      'error',
+      'Nenhuma fonte ativa elegível',
+    );
+    expect(gateway.getMangaBySlug).not.toHaveBeenCalled();
+  });
+
   it('should skip if already syncing', async () => {
     const repo = makeRepo({
       getSyncStatus: jest

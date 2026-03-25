@@ -26,6 +26,8 @@ import {
   parseCoinChapterCost,
   parseFreeChapterFraction,
 } from '../../../../shared/domain/chapter-free-tier.policy';
+import { MangaSourceUnavailableError } from '../../../../shared/domain/errors';
+import { ResolveMangaSourceUseCase } from './resolve-manga-source.use-case';
 
 export interface SyncResult {
   mangaId: string;
@@ -70,6 +72,7 @@ export class SyncMangaFromSourceUseCase {
     @Inject(MANGA_SYNC_PROGRESS)
     private readonly syncProgress: MangaSyncProgressPort,
     private readonly config: ConfigService,
+    private readonly resolveMangaSource: ResolveMangaSourceUseCase,
   ) {}
 
   async execute(slug: string): Promise<SyncResult | null> {
@@ -93,9 +96,24 @@ export class SyncMangaFromSourceUseCase {
     await this.mangaRepo.setSyncStatus(slug, 'syncing');
 
     let mangaTypeKey: CanonicalMangaType = 'manhwa';
+    let canonicalSlug = slug;
 
     try {
-      const external = await this.gateway.getMangaBySlug(slug);
+      try {
+        const resolved = await this.resolveMangaSource.execute({
+          slug,
+          context: { kind: 'public' },
+        });
+        canonicalSlug = resolved.canonicalSlug;
+      } catch (err) {
+        if (err instanceof MangaSourceUnavailableError) {
+          await this.mangaRepo.setSyncStatus(slug, 'error', err.message);
+          return null;
+        }
+        throw err;
+      }
+
+      const external = await this.gateway.getMangaBySlug(canonicalSlug);
       if (!external) {
         await this.mangaRepo.setSyncStatus(slug, 'idle');
         return null;
