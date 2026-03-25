@@ -5,11 +5,11 @@ import {
   type MangaSummaryDto,
   type UpsertMangaInput,
 } from '../ports/manga.repository.port';
+import type { ExternalMangaSummaryDto } from '../ports/external-manga-gateway.port';
 import {
-  EXTERNAL_MANGA_GATEWAY,
-  type ExternalMangaGatewayPort,
-  type ExternalMangaSummaryDto,
-} from '../ports/external-manga-gateway.port';
+  SOURCE_ADAPTER_RESOLVER,
+  type SourceAdapterResolverPort,
+} from '../ports/source-adapter-resolver.port';
 import { ResolvePublicCatalogSourceUseCase } from './resolve-public-catalog-source.use-case';
 
 function toUpsertFromExternalSummary(
@@ -54,8 +54,8 @@ export class GetHomeFeedUseCase {
   constructor(
     @Inject(MANGA_REPOSITORY)
     private readonly mangaRepo: MangaRepositoryPort,
-    @Inject(EXTERNAL_MANGA_GATEWAY)
-    private readonly gateway: ExternalMangaGatewayPort,
+    @Inject(SOURCE_ADAPTER_RESOLVER)
+    private readonly sourceAdapterResolver: SourceAdapterResolverPort,
     private readonly resolvePublicCatalogSource: ResolvePublicCatalogSourceUseCase,
   ) {}
 
@@ -139,7 +139,9 @@ export class GetHomeFeedUseCase {
   ): Promise<MangaSummaryDto[]> {
     try {
       void this.resolvePublicCatalogSource.execute();
-      const items = await this.gateway.listTrending({
+      const adapter =
+        this.sourceAdapterResolver.resolveForPublicCatalogIngest();
+      const items = await adapter.listTrending({
         limit,
         includeNsfw: includeNsfw ?? null,
       });

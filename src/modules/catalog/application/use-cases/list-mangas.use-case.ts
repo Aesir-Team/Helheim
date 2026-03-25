@@ -7,11 +7,11 @@ import {
   type MangaSummaryDto,
   type UpsertMangaInput,
 } from '../ports/manga.repository.port';
+import type { ExternalMangaSummaryDto } from '../ports/external-manga-gateway.port';
 import {
-  EXTERNAL_MANGA_GATEWAY,
-  type ExternalMangaGatewayPort,
-  type ExternalMangaSummaryDto,
-} from '../ports/external-manga-gateway.port';
+  SOURCE_ADAPTER_RESOLVER,
+  type SourceAdapterResolverPort,
+} from '../ports/source-adapter-resolver.port';
 import { ResolvePublicCatalogSourceUseCase } from './resolve-public-catalog-source.use-case';
 
 /** Máximo de itens trazidos da fonte externa por busca (evita burst). */
@@ -68,8 +68,8 @@ export class ListMangasUseCase {
   constructor(
     @Inject(MANGA_REPOSITORY)
     private readonly mangaRepo: MangaRepositoryPort,
-    @Inject(EXTERNAL_MANGA_GATEWAY)
-    private readonly gateway: ExternalMangaGatewayPort,
+    @Inject(SOURCE_ADAPTER_RESOLVER)
+    private readonly sourceAdapterResolver: SourceAdapterResolverPort,
     private readonly resolvePublicCatalogSource: ResolvePublicCatalogSourceUseCase,
   ) {}
 
@@ -109,7 +109,9 @@ export class ListMangasUseCase {
 
     try {
       void this.resolvePublicCatalogSource.execute();
-      const items = await this.gateway.listMangas({
+      const adapter =
+        this.sourceAdapterResolver.resolveForPublicCatalogIngest();
+      const items = await adapter.listMangas({
         search,
         limit: externalLimit,
         includeNsfw: params.includeNsfw ?? null,

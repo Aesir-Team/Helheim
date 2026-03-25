@@ -1,6 +1,6 @@
 /**
- * Port para buscar mangás/capítulos em fonte externa (Nexustoons).
- * Use cases de sync dependem desta interface, não do HTTP concreto.
+ * Port de baixo nível por adapter HTTP (um por provider na borda).
+ * Use cases devem preferir `SourceAdapterResolverPort` + `SourceMangaAdapterPort`.
  */
 
 export const EXTERNAL_MANGA_GATEWAY = Symbol('EXTERNAL_MANGA_GATEWAY');

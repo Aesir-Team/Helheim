@@ -5,6 +5,7 @@ import type {
 } from '../ports/manga.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
 import type { ListMangasParams } from '../ports/manga.repository.port';
+import { fakeSourceAdapterResolverFromGateway } from '../test-utils/fake-source-adapter-resolver';
 import { ResolvePublicCatalogSourceUseCase } from './resolve-public-catalog-source.use-case';
 
 const MANGA_STUB: MangaSummaryDto = {
@@ -111,7 +112,7 @@ describe('GetHomeFeedUseCase', () => {
     const gateway = makeGateway();
     const sut = new GetHomeFeedUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -188,7 +189,7 @@ describe('GetHomeFeedUseCase', () => {
     });
     const sut = new GetHomeFeedUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -272,7 +273,7 @@ describe('GetHomeFeedUseCase', () => {
     });
     const sut = new GetHomeFeedUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 

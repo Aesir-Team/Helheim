@@ -4,6 +4,7 @@ import type {
   MangaDetailDto,
 } from '../ports/manga.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
+import { fakeSourceAdapterResolverFromGateway } from '../test-utils/fake-source-adapter-resolver';
 import { NotFoundError } from '../../../../shared/domain/errors';
 import type { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
 import type { ChapterSummariesViewerLockApplier } from '../services/chapter-summaries-viewer-lock.applier';
@@ -152,7 +153,7 @@ describe('GetMangaBySlugUseCase', () => {
       const sync = makeSync();
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -194,7 +195,7 @@ describe('GetMangaBySlugUseCase', () => {
       const sync = makeSync();
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -221,7 +222,7 @@ describe('GetMangaBySlugUseCase', () => {
       const sync = makeSync();
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -251,7 +252,7 @@ describe('GetMangaBySlugUseCase', () => {
       const sync = makeSync();
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -294,7 +295,7 @@ describe('GetMangaBySlugUseCase', () => {
       });
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         makeSync() as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -327,7 +328,7 @@ describe('GetMangaBySlugUseCase', () => {
       });
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         makeSync() as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -353,7 +354,7 @@ describe('GetMangaBySlugUseCase', () => {
 
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -380,7 +381,7 @@ describe('GetMangaBySlugUseCase', () => {
 
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),
@@ -404,7 +405,7 @@ describe('GetMangaBySlugUseCase', () => {
       const sync = makeSync();
       const sut = new GetMangaBySlugUseCase(
         repo,
-        gateway,
+        fakeSourceAdapterResolverFromGateway(gateway),
         sync as unknown as SyncMangaFromSourceUseCase,
         makeLockApplier(),
         makeSummaryEnricher(),

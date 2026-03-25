@@ -5,6 +5,7 @@ import type { ChapterRepositoryPort } from '../ports/chapter.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
 import type { MangaSyncProgressPort } from '../ports/manga-sync-progress.port';
 import { MangaSourceUnavailableError } from '../../../../shared/domain/errors';
+import { fakeSourceAdapterResolverFromGateway } from '../test-utils/fake-source-adapter-resolver';
 import { ResolveMangaSourceUseCase } from './resolve-manga-source.use-case';
 
 function makeRepo(
@@ -119,7 +120,7 @@ function makeSut(
   return new SyncMangaFromSourceUseCase(
     repo,
     chapterRepo,
-    gateway,
+    fakeSourceAdapterResolverFromGateway(gateway),
     progress ?? makeProgress(),
     config ?? makeConfig(),
     resolveMangaSource ?? makeResolveMangaSource(),

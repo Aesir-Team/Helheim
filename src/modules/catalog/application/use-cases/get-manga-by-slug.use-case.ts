@@ -5,9 +5,9 @@ import {
   type MangaDetailDto,
 } from '../ports/manga.repository.port';
 import {
-  EXTERNAL_MANGA_GATEWAY,
-  type ExternalMangaGatewayPort,
-} from '../ports/external-manga-gateway.port';
+  SOURCE_ADAPTER_RESOLVER,
+  type SourceAdapterResolverPort,
+} from '../ports/source-adapter-resolver.port';
 import { NotFoundError } from '../../../../shared/domain/errors';
 import { SyncMangaFromSourceUseCase } from './sync-manga-from-source.use-case';
 import {
@@ -31,8 +31,8 @@ export class GetMangaBySlugUseCase {
   constructor(
     @Inject(MANGA_REPOSITORY)
     private readonly mangaRepo: MangaRepositoryPort,
-    @Inject(EXTERNAL_MANGA_GATEWAY)
-    private readonly gateway: ExternalMangaGatewayPort,
+    @Inject(SOURCE_ADAPTER_RESOLVER)
+    private readonly sourceAdapterResolver: SourceAdapterResolverPort,
     private readonly syncMangaFromSource: SyncMangaFromSourceUseCase,
     private readonly viewerLockApplier: ChapterSummariesViewerLockApplier,
     private readonly summaryEnricher: ChapterSummariesCatalogEnricher,
@@ -103,7 +103,9 @@ export class GetMangaBySlugUseCase {
   /** Alinhado à busca em lista: tenta fonte externa, upsert no catálogo; falha HTTP não bloqueia leitura local. */
   private async ingestExternalMangaBySlug(slug: string): Promise<void> {
     try {
-      const external = await this.gateway.getMangaBySlug(slug);
+      const adapter =
+        this.sourceAdapterResolver.resolveForPublicCatalogIngest();
+      const external = await adapter.getMangaBySlug(slug);
       if (!external) {
         return;
       }

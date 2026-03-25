@@ -17,6 +17,7 @@ import {
 } from './nexustoons-json.mapper';
 import { decryptResponse } from './orion-crypto';
 
+/** Adapter Nexustoons (`ExternalSourceProvider.NEXUSTOONS`, origem externa). */
 @Injectable()
 export class NexustoonsMangaGateway implements ExternalMangaGatewayPort {
   constructor(private readonly config: ConfigService) {}

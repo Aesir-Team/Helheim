@@ -8,11 +8,11 @@ import {
   CHAPTER_REPOSITORY,
   type ChapterRepositoryPort,
 } from '../ports/chapter.repository.port';
+import type { ExternalMangaChapterRefDto } from '../ports/external-manga-gateway.port';
 import {
-  EXTERNAL_MANGA_GATEWAY,
-  type ExternalMangaGatewayPort,
-  type ExternalMangaChapterRefDto,
-} from '../ports/external-manga-gateway.port';
+  SOURCE_ADAPTER_RESOLVER,
+  type SourceAdapterResolverPort,
+} from '../ports/source-adapter-resolver.port';
 import {
   MANGA_SYNC_PROGRESS,
   type MangaSyncProgressPort,
@@ -67,8 +67,8 @@ export class SyncMangaFromSourceUseCase {
     private readonly mangaRepo: MangaRepositoryPort,
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: ChapterRepositoryPort,
-    @Inject(EXTERNAL_MANGA_GATEWAY)
-    private readonly gateway: ExternalMangaGatewayPort,
+    @Inject(SOURCE_ADAPTER_RESOLVER)
+    private readonly sourceAdapterResolver: SourceAdapterResolverPort,
     @Inject(MANGA_SYNC_PROGRESS)
     private readonly syncProgress: MangaSyncProgressPort,
     private readonly config: ConfigService,
@@ -99,12 +99,14 @@ export class SyncMangaFromSourceUseCase {
     let canonicalSlug = slug;
 
     try {
+      let resolvedProvider = 'NEXUSTOONS';
       try {
         const resolved = await this.resolveMangaSource.execute({
           slug,
           context: { kind: 'public' },
         });
         canonicalSlug = resolved.canonicalSlug;
+        resolvedProvider = resolved.provider;
       } catch (err) {
         if (err instanceof MangaSourceUnavailableError) {
           await this.mangaRepo.setSyncStatus(slug, 'error', err.message);
@@ -113,7 +115,10 @@ export class SyncMangaFromSourceUseCase {
         throw err;
       }
 
-      const external = await this.gateway.getMangaBySlug(canonicalSlug);
+      const adapter = this.sourceAdapterResolver.resolveForProvider(
+        resolvedProvider,
+      );
+      const external = await adapter.getMangaBySlug(canonicalSlug);
       if (!external) {
         await this.mangaRepo.setSyncStatus(slug, 'idle');
         return null;
@@ -231,7 +236,7 @@ export class SyncMangaFromSourceUseCase {
 
         await sleep(chapterDelayMs);
 
-        const detail = await this.gateway.getChapterById(ch.id);
+        const detail = await adapter.getChapterById(ch.id);
         if (!detail) {
           continue;
         }

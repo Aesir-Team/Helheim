@@ -5,6 +5,7 @@ import type {
   PaginatedResult,
 } from '../ports/manga.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
+import { fakeSourceAdapterResolverFromGateway } from '../test-utils/fake-source-adapter-resolver';
 import { ResolvePublicCatalogSourceUseCase } from './resolve-public-catalog-source.use-case';
 
 const MANGA_STUB: MangaSummaryDto = {
@@ -87,7 +88,7 @@ describe('ListMangasUseCase', () => {
     const gateway = makeGateway();
     const sut = new ListMangasUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -113,7 +114,7 @@ describe('ListMangasUseCase', () => {
     const gateway = makeGateway();
     const sut = new ListMangasUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -129,7 +130,7 @@ describe('ListMangasUseCase', () => {
     const gateway = makeGateway();
     const sut = new ListMangasUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -161,7 +162,7 @@ describe('ListMangasUseCase', () => {
     const gateway = makeGateway();
     const sut = new ListMangasUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -180,7 +181,7 @@ describe('ListMangasUseCase', () => {
     });
     const sut = new ListMangasUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -215,7 +216,7 @@ describe('ListMangasUseCase', () => {
     });
     const sut = new ListMangasUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
@@ -233,7 +234,7 @@ describe('ListMangasUseCase', () => {
     });
     const sut = new ListMangasUseCase(
       repo,
-      gateway,
+      fakeSourceAdapterResolverFromGateway(gateway),
       makeResolvePublicCatalog(),
     );
 
