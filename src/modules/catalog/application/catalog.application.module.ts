@@ -12,6 +12,8 @@ import { PrismaMangaRepository } from '../infrastructure/persistence/prisma-mang
 import { PrismaChapterRepository } from '../infrastructure/persistence/prisma-chapter.repository';
 import { PrismaCategoryRepository } from '../infrastructure/persistence/prisma-category.repository';
 import { PrismaMangaSourceResolutionRepository } from '../infrastructure/persistence/prisma-manga-source-resolution.repository';
+import { PrismaMangaExternalSourceRepository } from '../infrastructure/persistence/prisma-manga-external-source.repository';
+import { MANGA_EXTERNAL_SOURCE_REPOSITORY } from './ports/manga-external-source.repository.port';
 import { MANGA_SOURCE_RESOLUTION_LOAD_PORT } from './ports/manga-source-resolution.port';
 import { ResolveMangaSourceUseCase } from './use-cases/resolve-manga-source.use-case';
 import { ResolvePublicCatalogSourceUseCase } from './use-cases/resolve-public-catalog-source.use-case';
@@ -39,6 +41,10 @@ import { ChapterSummariesCatalogEnricher } from './services/chapter-summaries-ca
     { provide: MANGA_REPOSITORY, useClass: PrismaMangaRepository },
     { provide: CHAPTER_REPOSITORY, useClass: PrismaChapterRepository },
     { provide: CATEGORY_REPOSITORY, useClass: PrismaCategoryRepository },
+    {
+      provide: MANGA_EXTERNAL_SOURCE_REPOSITORY,
+      useClass: PrismaMangaExternalSourceRepository,
+    },
     {
       provide: MANGA_SOURCE_RESOLUTION_LOAD_PORT,
       useClass: PrismaMangaSourceResolutionRepository,

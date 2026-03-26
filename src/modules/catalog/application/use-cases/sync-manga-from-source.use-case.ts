@@ -10,6 +10,10 @@ import {
 } from '../ports/chapter.repository.port';
 import type { ExternalMangaChapterRefDto } from '../ports/external-manga-gateway.port';
 import {
+  MANGA_EXTERNAL_SOURCE_REPOSITORY,
+  type MangaExternalSourceRepositoryPort,
+} from '../ports/manga-external-source.repository.port';
+import {
   SOURCE_ADAPTER_RESOLVER,
   type SourceAdapterResolverPort,
 } from '../ports/source-adapter-resolver.port';
@@ -26,13 +30,43 @@ import {
   parseCoinChapterCost,
   parseFreeChapterFraction,
 } from '../../../../shared/domain/chapter-free-tier.policy';
-import { MangaSourceUnavailableError } from '../../../../shared/domain/errors';
+import {
+  ForbiddenError,
+  MangaSourceUnavailableError,
+  NotFoundError,
+} from '../../../../shared/domain/errors';
+import { isUserScopedSourceOwnedByActor } from '../../../../shared/domain/public-catalog-source.policy';
 import { ResolveMangaSourceUseCase } from './resolve-manga-source.use-case';
 
 export interface SyncResult {
   mangaId: string;
   chaptersUpserted: number;
+  kind: 'catalog' | 'private_library';
+  /**
+   * Biblioteca privada: nenhuma escrita em `Manga`/`Chapter` canônicos.
+   * Persistência dedicada (capítulos por dono) fica para fases seguintes.
+   */
+  catalogWritesSkipped?: boolean;
 }
+
+/** Sync em catálogo público (comportamento legado GET detalhe / hub global). */
+export type CatalogMangaSyncInput = { kind: 'catalog'; slug: string };
+
+/**
+ * Sync apenas da visão da source privada do dono.
+ * Não atualiza metadata nem capítulos do catálogo global.
+ */
+export type PrivateLibraryMangaSyncInput = {
+  kind: 'private_library';
+  slug: string;
+  sourceId: string;
+  actorUserId: string | null;
+  installationId?: string | null;
+};
+
+export type SyncMangaFromSourceInput =
+  | CatalogMangaSyncInput
+  | PrivateLibraryMangaSyncInput;
 
 function isPublished(ch: ExternalMangaChapterRefDto): boolean {
   return !ch.releaseStatus || ch.releaseStatus === 'published';
@@ -73,9 +107,160 @@ export class SyncMangaFromSourceUseCase {
     private readonly syncProgress: MangaSyncProgressPort,
     private readonly config: ConfigService,
     private readonly resolveMangaSource: ResolveMangaSourceUseCase,
+    @Inject(MANGA_EXTERNAL_SOURCE_REPOSITORY)
+    private readonly externalSourceRepo: MangaExternalSourceRepositoryPort,
   ) {}
 
-  async execute(slug: string): Promise<SyncResult | null> {
+  /**
+   * Aceita `{ kind, ... }` ou `slug` (string) como atalho para catálogo público.
+   */
+  async execute(
+    input: SyncMangaFromSourceInput | string,
+  ): Promise<SyncResult | null> {
+    const normalized: SyncMangaFromSourceInput =
+      typeof input === 'string' ? { kind: 'catalog', slug: input } : input;
+
+    if (normalized.kind === 'private_library') {
+      return this.runPrivateLibrarySync(normalized);
+    }
+    return this.runCatalogSync(normalized.slug);
+  }
+
+  private async runPrivateLibrarySync(
+    input: PrivateLibraryMangaSyncInput,
+  ): Promise<SyncResult | null> {
+    const slug = input.slug.trim();
+    if (!slug) {
+      return null;
+    }
+
+    const source = await this.externalSourceRepo.findById(input.sourceId);
+    if (source == null) {
+      this.logger.warn(`Private sync: source not found ${input.sourceId}`);
+      return null;
+    }
+
+    if (!source.isUserScoped) {
+      throw new ForbiddenError(
+        'Sync de biblioteca privada exige source user-scoped.',
+        'private_library_requires_user_scoped_source',
+      );
+    }
+
+    const owned = isUserScopedSourceOwnedByActor({
+      row: source,
+      actorUserId: input.actorUserId,
+      installationId: input.installationId,
+    });
+    if (!owned) {
+      throw new ForbiddenError(
+        'Sem permissão para sincronizar esta source.',
+        'private_library_source_forbidden',
+      );
+    }
+
+    if (!source.isActive) {
+      await this.externalSourceRepo.setSyncStatus(
+        input.sourceId,
+        'error',
+        'source_inactive',
+      );
+      return null;
+    }
+
+    const manga = await this.mangaRepo.findByIdForListItem(source.mangaId);
+    if (manga == null || manga.slug !== slug) {
+      throw new NotFoundError(
+        `Mangá incompatível com a source para slug "${slug}".`,
+      );
+    }
+
+    const syncInfo = await this.externalSourceRepo.getSyncStatus(
+      input.sourceId,
+    );
+    if (syncInfo?.syncStatus === 'syncing') {
+      this.logger.warn(
+        `Private sync already running for source "${input.sourceId}", skipping`,
+      );
+      return null;
+    }
+
+    if (
+      syncInfo?.syncStatus === 'idle' &&
+      syncInfo.lastSyncedAt != null &&
+      Date.now() - syncInfo.lastSyncedAt.getTime() < SYNC_COOLDOWN_MS
+    ) {
+      this.logger.debug(
+        `Private sync skipped source=${input.sourceId}: within cooldown`,
+      );
+      return null;
+    }
+
+    await this.externalSourceRepo.setSyncStatus(input.sourceId, 'syncing');
+
+    let mangaTypeKey: CanonicalMangaType = 'manhwa';
+
+    try {
+      const adapter = this.sourceAdapterResolver.resolveForProvider(
+        source.provider,
+      );
+      const external = await adapter.getMangaBySlug(slug);
+      if (!external) {
+        await this.externalSourceRepo.setSyncStatus(input.sourceId, 'idle');
+        return null;
+      }
+
+      mangaTypeKey = normalizeMangaTypeFromExternal(external.type);
+      await this.externalSourceRepo.markSourceSyncSuccess(input.sourceId);
+
+      const nowIso = new Date().toISOString();
+      await this.publishState({
+        slug,
+        mangaType: mangaTypeKey,
+        status: 'completed',
+        startedAt: nowIso,
+        deadlineAt: nowIso,
+        totalChapters: 0,
+        chaptersProcessed: 0,
+        lastChapterNumber: null,
+        lastImageUrlPreview: [],
+        updatedAt: nowIso,
+      });
+
+      return {
+        mangaId: source.mangaId,
+        chaptersUpserted: 0,
+        kind: 'private_library',
+        catalogWritesSkipped: true,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Private sync failed source=${input.sourceId} slug=${slug}: ${message}`,
+      );
+      await this.externalSourceRepo.setSyncStatus(
+        input.sourceId,
+        'error',
+        message,
+      );
+      await this.publishState({
+        slug,
+        mangaType: mangaTypeKey,
+        status: 'failed',
+        startedAt: new Date().toISOString(),
+        deadlineAt: new Date().toISOString(),
+        totalChapters: 0,
+        chaptersProcessed: 0,
+        lastChapterNumber: null,
+        lastImageUrlPreview: [],
+        updatedAt: new Date().toISOString(),
+        errorMessage: message,
+      });
+      return null;
+    }
+  }
+
+  private async runCatalogSync(slug: string): Promise<SyncResult | null> {
     const syncInfo = await this.mangaRepo.getSyncStatus(slug);
     if (syncInfo?.syncStatus === 'syncing') {
       this.logger.warn(`Sync already running for "${slug}", skipping`);
@@ -115,9 +300,8 @@ export class SyncMangaFromSourceUseCase {
         throw err;
       }
 
-      const adapter = this.sourceAdapterResolver.resolveForProvider(
-        resolvedProvider,
-      );
+      const adapter =
+        this.sourceAdapterResolver.resolveForProvider(resolvedProvider);
       const external = await adapter.getMangaBySlug(canonicalSlug);
       if (!external) {
         await this.mangaRepo.setSyncStatus(slug, 'idle');
@@ -231,7 +415,11 @@ export class SyncMangaFromSourceUseCase {
           );
           await this.applyFreeTierForMangaSafe(mangaId);
           await this.mergeDbChapterCountIntoReported(slug, mangaId);
-          return { mangaId, chaptersUpserted };
+          return {
+            mangaId,
+            chaptersUpserted,
+            kind: 'catalog',
+          };
         }
 
         await sleep(chapterDelayMs);
@@ -291,7 +479,7 @@ export class SyncMangaFromSourceUseCase {
       await this.applyFreeTierForMangaSafe(mangaId);
       await this.mergeDbChapterCountIntoReported(slug, mangaId);
       await this.mangaRepo.setSyncStatus(slug, 'idle');
-      return { mangaId, chaptersUpserted };
+      return { mangaId, chaptersUpserted, kind: 'catalog' };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Sync failed for "${slug}": ${message}`);

@@ -12,6 +12,7 @@ Este diretório organiza o refactor para evoluir o backend sem quebrar o runtime
 
 ## Complementos
 - [`docs/RUNTIME-VIGENTE-MVP.md`](../docs/RUNTIME-VIGENTE-MVP.md) — comportamento operacional congelado (Fase 0)
+- [`FRONTEND-MODIFICACOES.md`](./FRONTEND-MODIFICACOES.md) — guia do que mudar/preparar no frontend com base no refactor
 - `tickets.md` — tickets macro para execução incremental
 - `risks.md` — riscos e mitigação
 

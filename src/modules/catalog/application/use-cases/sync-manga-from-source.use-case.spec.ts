@@ -4,7 +4,11 @@ import type { MangaRepositoryPort } from '../ports/manga.repository.port';
 import type { ChapterRepositoryPort } from '../ports/chapter.repository.port';
 import type { ExternalMangaGatewayPort } from '../ports/external-manga-gateway.port';
 import type { MangaSyncProgressPort } from '../ports/manga-sync-progress.port';
-import { MangaSourceUnavailableError } from '../../../../shared/domain/errors';
+import {
+  ForbiddenError,
+  MangaSourceUnavailableError,
+} from '../../../../shared/domain/errors';
+import type { MangaExternalSourceRepositoryPort } from '../ports/manga-external-source.repository.port';
 import { fakeSourceAdapterResolverFromGateway } from '../test-utils/fake-source-adapter-resolver';
 import { ResolveMangaSourceUseCase } from './resolve-manga-source.use-case';
 
@@ -73,6 +77,20 @@ function makeGateway(
   };
 }
 
+function makeExternalSourceRepo(
+  overrides?: Partial<MangaExternalSourceRepositoryPort>,
+): MangaExternalSourceRepositoryPort {
+  return {
+    findById: jest.fn().mockResolvedValue(null),
+    getSyncStatus: jest
+      .fn()
+      .mockResolvedValue({ syncStatus: 'idle', lastSyncedAt: null }),
+    setSyncStatus: jest.fn().mockResolvedValue(undefined),
+    markSourceSyncSuccess: jest.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
 function makeProgress(): MangaSyncProgressPort {
   return {
     publish: jest.fn().mockResolvedValue(undefined),
@@ -116,6 +134,7 @@ function makeSut(
   progress?: MangaSyncProgressPort,
   config?: ConfigService,
   resolveMangaSource?: ResolveMangaSourceUseCase,
+  externalSourceRepo?: MangaExternalSourceRepositoryPort,
 ): SyncMangaFromSourceUseCase {
   return new SyncMangaFromSourceUseCase(
     repo,
@@ -124,6 +143,7 @@ function makeSut(
     progress ?? makeProgress(),
     config ?? makeConfig(),
     resolveMangaSource ?? makeResolveMangaSource(),
+    externalSourceRepo ?? makeExternalSourceRepo(),
   );
 }
 
@@ -239,7 +259,11 @@ describe('SyncMangaFromSourceUseCase', () => {
     );
     expect(gateway.getChapterById).toHaveBeenCalledTimes(2);
     expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 2 });
+    expect(result).toEqual({
+      mangaId: 'm1',
+      chaptersUpserted: 2,
+      kind: 'catalog',
+    });
     expect(chapterRepo.applyFreeTierAccessForManga).toHaveBeenCalledWith('m1', {
       freeFraction: 0.1,
       coinChapterCost: 1,
@@ -291,7 +315,11 @@ describe('SyncMangaFromSourceUseCase', () => {
     expect(chapterRepo.upsertByMangaAndNumber).toHaveBeenCalledWith(
       expect.objectContaining({ number: '2' }),
     );
-    expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 1 });
+    expect(result).toEqual({
+      mangaId: 'm1',
+      chaptersUpserted: 1,
+      kind: 'catalog',
+    });
     expect(chapterRepo.applyFreeTierAccessForManga).toHaveBeenCalledWith('m1', {
       freeFraction: 0.1,
       coinChapterCost: 1,
@@ -340,7 +368,11 @@ describe('SyncMangaFromSourceUseCase', () => {
 
     const result = await sut.execute('slow');
 
-    expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 0 });
+    expect(result).toEqual({
+      mangaId: 'm1',
+      chaptersUpserted: 0,
+      kind: 'catalog',
+    });
     expect(chapterRepo.applyFreeTierAccessForManga).toHaveBeenCalledWith('m1', {
       freeFraction: 0.1,
       coinChapterCost: 1,
@@ -394,7 +426,11 @@ describe('SyncMangaFromSourceUseCase', () => {
     expect(gateway.getChapterById).toHaveBeenCalledWith('ch-1');
     expect(gateway.getChapterById).toHaveBeenCalledWith('ch-3');
     expect(gateway.getChapterById).not.toHaveBeenCalledWith('ch-2');
-    expect(result).toEqual({ mangaId: 'm1', chaptersUpserted: 2 });
+    expect(result).toEqual({
+      mangaId: 'm1',
+      chaptersUpserted: 2,
+      kind: 'catalog',
+    });
   });
 
   it('should propagate accessLevel and coinCost to chapter upsert', async () => {
@@ -539,5 +575,124 @@ describe('SyncMangaFromSourceUseCase', () => {
     expect(progress.publish).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed', slug: 'fail-slug' }),
     );
+  });
+
+  describe('private_library sync', () => {
+    const privateSourceBase = {
+      id: 'src-priv',
+      mangaId: 'm1',
+      provider: 'NEXUSTOONS',
+      externalId: 'ext-x',
+      isUserScoped: true,
+      ownerUserId: 'user-1',
+      ownerInstallationId: null as string | null,
+      isActive: true,
+    };
+
+    it('should throw ForbiddenError when source is not user-scoped', async () => {
+      const extRepo = makeExternalSourceRepo({
+        findById: jest.fn().mockResolvedValue({
+          ...privateSourceBase,
+          isUserScoped: false,
+          ownerUserId: null,
+        }),
+      });
+      const sut = makeSut(
+        makeRepo(),
+        makeChapterRepo(),
+        makeGateway(),
+        undefined,
+        undefined,
+        undefined,
+        extRepo,
+      );
+      await expect(
+        sut.execute({
+          kind: 'private_library',
+          slug: 'solo-leveling',
+          sourceId: 'src-priv',
+          actorUserId: 'user-1',
+        }),
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('should throw ForbiddenError when actor does not own source', async () => {
+      const extRepo = makeExternalSourceRepo({
+        findById: jest.fn().mockResolvedValue(privateSourceBase),
+      });
+      const sut = makeSut(
+        makeRepo(),
+        makeChapterRepo(),
+        makeGateway(),
+        undefined,
+        undefined,
+        undefined,
+        extRepo,
+      );
+      await expect(
+        sut.execute({
+          kind: 'private_library',
+          slug: 'solo-leveling',
+          sourceId: 'src-priv',
+          actorUserId: 'other',
+        }),
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('should touch adapter and source row without upserting manga or chapters', async () => {
+      const findByIdForListItem = jest.fn().mockResolvedValue({
+        id: 'm1',
+        title: 'Solo',
+        slug: 'solo-leveling',
+        coverImage: 'c',
+      });
+      const repo = makeRepo({ findByIdForListItem });
+      const chapterRepo = makeChapterRepo();
+      const gateway = makeGateway({
+        getMangaBySlug: jest.fn().mockResolvedValue({
+          id: 'ext-1',
+          slug: 'solo-leveling',
+          title: 'Solo Leveling',
+          coverImage: 'x',
+          type: 'manhwa',
+        }),
+      });
+      const markSourceSyncSuccess = jest.fn().mockResolvedValue(undefined);
+      const extRepo = makeExternalSourceRepo({
+        findById: jest.fn().mockResolvedValue(privateSourceBase),
+        getSyncStatus: jest
+          .fn()
+          .mockResolvedValue({ syncStatus: 'idle', lastSyncedAt: null }),
+        setSyncStatus: jest.fn().mockResolvedValue(undefined),
+        markSourceSyncSuccess,
+      });
+      const sut = makeSut(
+        repo,
+        chapterRepo,
+        gateway,
+        undefined,
+        undefined,
+        undefined,
+        extRepo,
+      );
+
+      const result = await sut.execute({
+        kind: 'private_library',
+        slug: 'solo-leveling',
+        sourceId: 'src-priv',
+        actorUserId: 'user-1',
+      });
+
+      expect(result).toEqual({
+        mangaId: 'm1',
+        chaptersUpserted: 0,
+        kind: 'private_library',
+        catalogWritesSkipped: true,
+      });
+      expect(repo.upsertBySlug).not.toHaveBeenCalled();
+      expect(chapterRepo.upsertByMangaAndNumber).not.toHaveBeenCalled();
+      expect(markSourceSyncSuccess).toHaveBeenCalledWith('src-priv');
+      expect(gateway.getMangaBySlug).toHaveBeenCalledWith('solo-leveling');
+    });
   });
 });
