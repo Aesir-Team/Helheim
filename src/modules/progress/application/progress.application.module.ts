@@ -23,6 +23,10 @@ import { ReadingProgressController } from '../presentation/controllers/reading-p
     SaveReadingProgressUseCase,
     GetContinueReadingUseCase,
   ],
-  exports: [SaveReadingProgressUseCase, READING_PROGRESS_REPOSITORY],
+  exports: [
+    SaveReadingProgressUseCase,
+    GetContinueReadingUseCase,
+    READING_PROGRESS_REPOSITORY,
+  ],
 })
 export class ProgressApplicationModule {}

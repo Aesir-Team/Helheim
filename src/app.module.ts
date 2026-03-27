@@ -8,8 +8,10 @@ import { AuthController } from './modules/auth/presentation/controllers/auth.con
 import { CatalogApplicationModule } from './modules/catalog/application/catalog.application.module';
 import { CatalogController } from './modules/catalog/presentation/controllers/catalog.controller';
 import { ChapterReadingController } from './modules/catalog/presentation/controllers/chapter-reading.controller';
-import { ListsApplicationModule } from './modules/lists/application/lists.application.module';
-import { ProgressApplicationModule } from './modules/progress/application/progress.application.module';
+import { LibraryApplicationModule } from './modules/library/application/library.application.module';
+import { SourcesApplicationModule } from './modules/sources/application/sources.application.module';
+import { IngestionApplicationModule } from './modules/ingestion/application/ingestion.application.module';
+import { GovernanceApplicationModule } from './modules/governance/application/governance.application.module';
 
 @Module({
   imports: [
@@ -17,8 +19,10 @@ import { ProgressApplicationModule } from './modules/progress/application/progre
     PrismaModule,
     AuthApplicationModule,
     CatalogApplicationModule,
-    ListsApplicationModule,
-    ProgressApplicationModule,
+    LibraryApplicationModule,
+    SourcesApplicationModule,
+    IngestionApplicationModule,
+    GovernanceApplicationModule,
   ],
   controllers: [
     AppController,

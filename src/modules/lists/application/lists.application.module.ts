@@ -31,5 +31,16 @@ import { UserListsController } from '../presentation/controllers/user-lists.cont
     AddMangaToListUseCase,
     RemoveMangaFromListUseCase,
   ],
+  exports: [
+    USER_MANGA_LIST_REPOSITORY,
+    ListUserMangaListsUseCase,
+    CreateUserMangaListUseCase,
+    GetUserMangaListUseCase,
+    UpdateUserMangaListUseCase,
+    DeleteUserMangaListUseCase,
+    ReorderUserMangaListsUseCase,
+    AddMangaToListUseCase,
+    RemoveMangaFromListUseCase,
+  ],
 })
 export class ListsApplicationModule {}

@@ -66,6 +66,7 @@ import { ChapterSummariesCatalogEnricher } from './services/chapter-summaries-ca
   exports: [
     MANGA_REPOSITORY,
     CHAPTER_REPOSITORY,
+    MANGA_EXTERNAL_SOURCE_REPOSITORY,
     GetHomeFeedUseCase,
     GetMangaSyncStatusUseCase,
     ListMangasUseCase,
